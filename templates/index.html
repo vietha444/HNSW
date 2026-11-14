@@ -1,0 +1,2911 @@
+<!DOCTYPE html>
+<html lang="vi" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HNSW Semantic Search Engine | Không Gian 3D Thời Gian Thực & Tách Chữ PDF</title>
+  
+  <!-- Tailwind CSS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js for Benchmark curves -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Three.js & OrbitControls (Local with CDN fallback) -->
+  <script src="/static/three.min.js"></script>
+  <script src="/static/OrbitControls.js"></script>
+  <script>
+    if (typeof THREE === 'undefined') {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+      document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"><\/script>');
+    }
+  </script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    code, pre {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(241, 245, 249, 0.8);
+    }
+    .dark .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(99, 102, 241, 0.4);
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(99, 102, 241, 0.7);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-200 selection:bg-brand-500 selection:text-white">
+
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-slate-200/90 dark:border-slate-800/80 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-50 transition-colors shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center shadow-md shadow-brand-500/20">
+          <i data-lucide="network" class="w-5 h-5 text-white"></i>
+        </div>
+        <div>
+          <span class="text-lg font-bold bg-gradient-to-r from-slate-900 via-brand-700 to-indigo-600 dark:from-white dark:via-slate-200 dark:to-brand-400 bg-clip-text text-transparent">
+            HNSW Semantic Search
+          </span>
+          <span class="hidden sm:inline-block ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200 dark:bg-brand-500/20 dark:text-brand-300 dark:border-brand-500/30">
+            Hierarchical Small World
+          </span>
+        </div>
+      </div>
+
+      <!-- System status pills & Theme Toggle -->
+      <div class="flex items-center space-x-2 sm:space-x-4">
+        <!-- Device Badge -->
+        <div id="deviceBadge" class="flex items-center space-x-1.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 px-2.5 py-1 rounded-full font-medium">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="deviceText">CUDA PyTorch</span>
+        </div>
+
+        <!-- Total Docs Pill -->
+        <div class="hidden md:flex items-center space-x-1.5 text-xs bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 px-2.5 py-1 rounded-full font-mono">
+          <i data-lucide="layers" class="w-3.5 h-3.5 text-brand-600 dark:text-brand-400"></i>
+          <span id="statDocs">23 Tài liệu</span>
+        </div>
+
+        <!-- Theme Toggle Button -->
+        <button onclick="toggleTheme()" id="themeToggleBtn" title="Chuyển chế độ Sáng / Tối" class="p-2 rounded-xl border border-slate-200 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition shadow-sm">
+          <i data-lucide="sun" id="themeIcon" class="w-4 h-4 text-amber-500"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 overflow-x-auto custom-scrollbar border-t border-slate-200/70 dark:border-slate-800/60">
+      <button onclick="switchTab('search')" id="tabBtn-search" class="tab-btn px-4 py-3 text-sm font-semibold flex items-center space-x-2 border-b-2 border-brand-600 text-brand-600 dark:border-brand-500 dark:text-brand-400">
+        <i data-lucide="search" class="w-4 h-4"></i>
+        <span>Tìm Kiếm Ngữ Nghĩa</span>
+      </button>
+
+      <!-- NEW 3D TAB -->
+      <button onclick="switchTab('3d')" id="tabBtn-3d" class="tab-btn px-4 py-3 text-sm font-semibold flex items-center space-x-2 border-b-2 border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200">
+        <i data-lucide="box" class="w-4 h-4 text-indigo-500"></i>
+        <span>Không Gian 3D HNSW (Real-time)</span>
+      </button>
+
+      <button onclick="switchTab('pdf')" id="tabBtn-pdf" class="tab-btn px-4 py-3 text-sm font-semibold flex items-center space-x-2 border-b-2 border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200">
+        <i data-lucide="file-up" class="w-4 h-4 text-rose-500"></i>
+        <span>Tách Chữ PDF & Nạp CSDL</span>
+      </button>
+      <button onclick="switchTab('visualizer')" id="tabBtn-visualizer" class="tab-btn px-4 py-3 text-sm font-semibold flex items-center space-x-2 border-b-2 border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200">
+        <i data-lucide="git-merge" class="w-4 h-4"></i>
+        <span>Trực Quan Hóa Tuyến Đường 2D</span>
+      </button>
+      <button onclick="switchTab('topology')" id="tabBtn-topology" class="tab-btn px-4 py-3 text-sm font-semibold flex items-center space-x-2 border-b-2 border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200">
+        <i data-lucide="activity" class="w-4 h-4"></i>
+        <span>Đồ Thị & Tinh Chỉnh</span>
+      </button>
+      <button onclick="switchTab('benchmark')" id="tabBtn-benchmark" class="tab-btn px-4 py-3 text-sm font-semibold flex items-center space-x-2 border-b-2 border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200">
+        <i data-lucide="gauge" class="w-4 h-4"></i>
+        <span>Benchmark So Sánh</span>
+      </button>
+      <button onclick="switchTab('corpus')" id="tabBtn-corpus" class="tab-btn px-4 py-3 text-sm font-semibold flex items-center space-x-2 border-b-2 border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200">
+        <i data-lucide="database" class="w-4 h-4"></i>
+        <span>Kho Tài Liệu</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- ==================== TAB 1: SEMANTIC SEARCH ==================== -->
+    <div id="tab-search" class="tab-content space-y-6">
+      
+      <!-- Search Box Card -->
+      <div class="bg-white dark:bg-slate-900/90 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 shadow-sm relative overflow-hidden transition-colors">
+        <div class="absolute -top-24 -right-24 w-72 h-72 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <form onsubmit="handleSearch(event)" class="space-y-4">
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <i data-lucide="search" class="w-5 h-5 text-brand-600 dark:text-brand-400"></i>
+            </div>
+            <input 
+              type="text" 
+              id="searchInput"
+              placeholder="Nhập nội dung cần tìm kiếm theo ngữ nghĩa (vd: Cơ chế Attention, HNSW hoạt động ra sao, Định lý CAP, Phở bò...)"
+              class="w-full pl-12 pr-28 py-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 text-base transition shadow-sm"
+              value="Cơ chế Attention trong mạng Transformer hoạt động như thế nào?"
+            />
+            <button 
+              type="submit" 
+              id="searchBtn"
+              class="absolute right-2 top-2 bottom-2 px-5 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-lg text-sm transition flex items-center space-x-2 shadow-sm">
+              <span>Tìm kiếm</span>
+              <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <!-- Suggested query pills -->
+          <div class="flex flex-wrap items-center gap-2 pt-1 text-xs">
+            <span class="text-slate-500 dark:text-slate-400 font-medium flex items-center space-x-1">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-500"></i>
+              <span>Gợi ý thử nghiệm:</span>
+            </span>
+            <button type="button" onclick="setQuery('Cơ chế Attention trong mạng Transformer hoạt động như thế nào?')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-md text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 transition">Transformer & Attention</button>
+            <button type="button" onclick="setQuery('Thuật toán HNSW và điều kiện vùng lưỡi liềm trống Empty-Lune')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-md text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 transition">HNSW & Empty-Lune</button>
+            <button type="button" onclick="setQuery('Định lý CAP và tính nhất quán dữ liệu trong hệ phân tán')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-md text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 transition">Định lý CAP</button>
+            <button type="button" onclick="setQuery('AlphaFold dự đoán cấu trúc 3 chiều của protein')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-md text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 transition">AlphaFold Protein</button>
+            <button type="button" onclick="setQuery('Nguyên lý hoạt động của máy tính lượng tử và Qubit')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-md text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 transition">Qubit Lượng tử</button>
+            <button type="button" onclick="setQuery('Nghệ thuật ninh nước dùng phở bò truyền thống Việt Nam')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-md text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 transition">Ẩm thực Phở</button>
+          </div>
+
+          <!-- Controls drawer -->
+          <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs">
+            <div class="flex items-center space-x-6">
+              <div class="flex items-center space-x-2">
+                <span class="text-slate-600 dark:text-slate-400 font-medium">Top K:</span>
+                <input type="range" id="topKInput" min="1" max="15" value="5" class="w-24 accent-brand-600 cursor-pointer" oninput="topKVal.innerText = this.value">
+                <span id="topKVal" class="font-mono text-brand-600 dark:text-brand-400 font-bold w-4">5</span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <span class="text-slate-600 dark:text-slate-400 font-medium">efSearch:</span>
+                <input type="range" id="efSearchInput" min="5" max="100" value="50" step="5" class="w-28 accent-brand-600 cursor-pointer" oninput="efSearchVal.innerText = this.value">
+                <span id="efSearchVal" class="font-mono text-brand-600 dark:text-brand-400 font-bold w-6">50</span>
+              </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+              <label class="flex items-center space-x-2 cursor-pointer text-slate-700 dark:text-slate-300 select-none">
+                <input type="checkbox" id="compareGtCheckbox" checked class="rounded border-slate-300 text-brand-600 focus:ring-brand-500 accent-brand-600">
+                <span>So sánh đối chứng Ground Truth (Brute Force Exact Scan)</span>
+              </label>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Performance Metrics HUD -->
+      <div id="metricsHud" class="hidden grid grid-cols-2 md:grid-cols-4 gap-4">
+        <!-- HNSW Latency -->
+        <div class="bg-emerald-50/70 border border-emerald-200 dark:bg-slate-900/80 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-emerald-800 dark:text-slate-400 font-medium">Độ trễ HNSW Search</div>
+          <div class="mt-1 flex items-baseline space-x-1.5">
+            <span id="metricHnswLatency" class="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">0.00</span>
+            <span class="text-xs text-emerald-700 dark:text-slate-400 font-mono">ms</span>
+          </div>
+          <div class="mt-1 text-[11px] text-emerald-700/80 dark:text-slate-500 font-mono">Định tuyến $O(\log N)$</div>
+        </div>
+
+        <!-- Calculations Savings -->
+        <div class="bg-sky-50/70 border border-sky-200 dark:bg-slate-900/80 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-sky-800 dark:text-slate-400 font-medium">Tiết kiệm Phép tính Khoảng cách</div>
+          <div class="mt-1 flex items-baseline space-x-1.5">
+            <span id="metricCalcSavings" class="text-2xl font-bold font-mono text-sky-600 dark:text-cyan-400">0.0%</span>
+          </div>
+          <div class="mt-1 text-[11px] text-sky-700/80 dark:text-slate-500 font-mono" id="metricCalcFraction">0 / 0 phép tính</div>
+        </div>
+
+        <!-- Recall@K -->
+        <div class="bg-amber-50/70 border border-amber-200 dark:bg-slate-900/80 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-amber-800 dark:text-slate-400 font-medium">Độ chính xác Recall@K</div>
+          <div class="mt-1 flex items-baseline space-x-1.5">
+            <span id="metricRecall" class="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400">100%</span>
+          </div>
+          <div class="mt-1 text-[11px] text-amber-700/80 dark:text-slate-500 font-mono">So với Brute Force $O(N)$</div>
+        </div>
+
+        <!-- Embedding Time -->
+        <div class="bg-indigo-50/70 border border-indigo-200 dark:bg-slate-900/80 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-indigo-800 dark:text-slate-400 font-medium">Thời gian Embedding (GPU)</div>
+          <div class="mt-1 flex items-baseline space-x-1.5">
+            <span id="metricEmbLatency" class="text-2xl font-bold font-mono text-indigo-600 dark:text-indigo-400">0.00</span>
+            <span class="text-xs text-indigo-700 dark:text-slate-400 font-mono">ms</span>
+          </div>
+          <div class="mt-1 text-[11px] text-indigo-700/80 dark:text-slate-500 font-mono">384-dim all-MiniLM-L6-v2</div>
+        </div>
+      </div>
+
+      <!-- Search Results Container -->
+      <div id="resultsContainer" class="space-y-4">
+        <div class="text-center py-12 text-slate-400 dark:text-slate-500">
+          <i data-lucide="compass" class="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600 mb-2"></i>
+          <p>Nhập truy vấn bên trên để tìm kiếm tài liệu theo ngữ nghĩa với thuật toán HNSW.</p>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- ==================== TAB 2: 3D REAL-TIME HNSW VISUALIZER ==================== -->
+    <div id="tab-3d" class="tab-content hidden space-y-4">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
+        
+        <!-- Top Toolbar inside 3D tab -->
+        <div class="flex flex-col gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+          <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+            <!-- 3D Title & Status -->
+            <div class="flex items-center space-x-3">
+              <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white shadow-sm">
+                <i data-lucide="box" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                  <span>Không Gian 3D HNSW Thời Gian Thực</span>
+                  <span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400 font-mono font-bold">Live Data</span>
+                </h2>
+                <div class="text-[11px] text-slate-500 flex items-center space-x-2">
+                  <span>Tọa độ ngữ nghĩa chiếu qua PCA 2D • Tầng hiển thị theo trục Y</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Mode Selector: Search vs Insertion -->
+            <div class="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+              <button id="btn3DModeSearch" onclick="switch3DMode('search')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition bg-white dark:bg-slate-900 shadow-sm text-brand-600 dark:text-brand-400 flex items-center space-x-1.5">
+                <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                <span>Tìm Kiếm (Search)</span>
+              </button>
+              <button id="btn3DModeInsert" onclick="switch3DMode('insert')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center space-x-1.5">
+                <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                <span>Chèn Dữ Liệu (Insertion)</span>
+              </button>
+            </div>
+
+            <!-- Camera Presets -->
+            <div class="flex items-center space-x-1 text-xs">
+              <button onclick="setCameraIsometric()" class="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">Toàn cảnh 3D</button>
+              <button onclick="setCameraTopDown()" class="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">Từ trên xuống</button>
+              <button onclick="setCameraLayer0Focus()" class="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">Tập trung L0</button>
+              <button onclick="reset3DCamera()" title="Đặt lại góc quay" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
+                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Form 1: Search Form -->
+          <form id="form3DSearch" onsubmit="handle3DSearch(event)" class="flex items-center space-x-2 w-full pt-1">
+            <div class="relative flex-1">
+              <input 
+                type="text" 
+                id="search3DInput"
+                placeholder="Tìm & xem đường chạy định tuyến 3D trong thời gian thực..."
+                class="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-brand-500"
+                value="Cơ chế Attention trong mạng Transformer"
+              />
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400"></i>
+              </div>
+            </div>
+            <button 
+              type="submit" 
+              id="search3DBtn"
+              class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs rounded-xl transition flex items-center space-x-1.5 shadow-sm whitespace-nowrap">
+              <i data-lucide="play" class="w-3.5 h-3.5"></i>
+              <span>Mô Phỏng Tìm Kiếm</span>
+            </button>
+          </form>
+
+          <!-- Form 2: Insertion Form (Hidden initially) -->
+          <div id="form3DInsert" class="hidden flex flex-col gap-2.5 w-full pt-1 bg-slate-50 dark:bg-slate-950/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+            <div class="flex flex-col sm:flex-row items-center gap-2">
+              <input 
+                type="text" 
+                id="insert3DTitle"
+                placeholder="Tiêu đề tài liệu mới cần chèn..."
+                class="flex-1 w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-brand-500"
+                value="Cơ chế MoE (Mixture of Experts) trong DeepSeek-V3"
+              />
+              <select 
+                id="insert3DCategory"
+                class="w-full sm:w-44 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-brand-500">
+                <option value="Trí Tuệ Nhân Tạo">Trí Tuệ Nhân Tạo</option>
+                <option value="Xử Lý Ngôn Ngữ Tự Nhiên">NLP & LLM</option>
+                <option value="Cơ Sở Dữ Liệu Vector">Vector Database</option>
+                <option value="Khoa Học Máy Tính">Khoa Học Máy Tính</option>
+              </select>
+            </div>
+            <div class="flex flex-col sm:flex-row items-center gap-2">
+              <input 
+                type="text" 
+                id="insert3DContent"
+                placeholder="Nội dung hoặc tóm tắt tài liệu (sẽ được sinh vector embedding bằng PyTorch và chiếu PCA vào không gian 3D)..."
+                class="flex-1 w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-brand-500"
+                value="Kiến trúc MoE chia nhỏ feed-forward network thành nhiều chuyên gia độc lập kết hợp cơ chế Multi-Head Latent Attention giúp giảm chi phí tính toán GPU."
+              />
+              <button 
+                onclick="handle3DInsert(event)" 
+                id="insert3DBtn"
+                class="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl transition flex items-center justify-center space-x-1.5 shadow-sm whitespace-nowrap">
+                <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                <span>Chèn & Mô Phỏng 3D</span>
+              </button>
+            </div>
+            <!-- Quick Preset Samples -->
+            <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+              <span class="font-medium">Mẫu nhanh:</span>
+              <button type="button" onclick="fillInsertPreset('moe')" class="px-2 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono">⚡ DeepSeek MoE</button>
+              <button type="button" onclick="fillInsertPreset('lora')" class="px-2 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono">⚡ LoRA Adapter</button>
+              <button type="button" onclick="fillInsertPreset('flash')" class="px-2 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono">⚡ FlashAttention-3</button>
+              <button type="button" onclick="fillInsertPreset('quant')" class="px-2 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono">⚡ KV-Cache FP8</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3D Viewport Relative Box -->
+        <div id="viewport3DContainer" class="h-[620px] w-full relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 mt-3 shadow-inner select-none">
+          
+          <!-- WebGL Canvas Element -->
+          <canvas id="webgl3d-canvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+
+          <!-- Top-Center: Current Step Badge -->
+          <div class="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/85 backdrop-blur-md border border-slate-700/80 rounded-full px-4 py-1.5 text-xs font-mono text-slate-200 shadow-xl flex items-center space-x-2 pointer-events-none z-10">
+            <span class="w-2 h-2 rounded-full bg-brand-400 animate-pulse"></span>
+            <span id="stepStatusText" class="font-semibold">Sẵn sàng mô phỏng routing</span>
+          </div>
+
+          <!-- Bottom Floating Controls: Step Playback -->
+          <div class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-2xl px-4 py-2 text-xs flex items-center space-x-3 shadow-2xl z-10">
+            <button onclick="stepPrev()" title="Bước trước" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300">
+              <i data-lucide="skip-back" class="w-4 h-4"></i>
+            </button>
+            <button onclick="stepPlayPause()" id="playPauseBtn" title="Phát / Tạm dừng" class="w-8 h-8 rounded-xl bg-brand-600 hover:bg-brand-500 text-white flex items-center justify-center shadow-md shadow-brand-500/30">
+              <i data-lucide="play" id="playIcon" class="w-4 h-4"></i>
+            </button>
+            <button onclick="stepNext()" title="Bước tiếp theo" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300">
+              <i data-lucide="skip-forward" class="w-4 h-4"></i>
+            </button>
+            <button onclick="stepReset()" title="Đặt lại từ đầu" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+            </button>
+
+            <div class="h-4 w-px bg-slate-700"></div>
+            <span id="stepProgressIndicator" class="font-mono text-slate-400 font-medium">Bước 0 / 0</span>
+          </div>
+
+          <!-- Floating Left Panel: Filters & Layer Toggles -->
+          <div class="absolute top-3 left-3 w-56 bg-slate-900/85 backdrop-blur-md border border-slate-800/80 rounded-xl p-3 text-xs space-y-2 shadow-xl z-10 pointer-events-auto">
+            <div class="font-bold text-slate-300 flex items-center justify-between pb-1.5 border-b border-slate-800">
+              <span>Lớp Phân Tầng HNSW</span>
+              <span id="totalNodes3DBadge" class="text-[10px] text-brand-400 font-mono">0 nodes</span>
+            </div>
+            
+            <div id="layerFilterToggles" class="space-y-1.5 pt-1">
+              <!-- Dynamically generated layer toggles -->
+            </div>
+
+            <div class="pt-2 border-t border-slate-800 space-y-1">
+              <label class="flex items-center space-x-2 text-slate-300 cursor-pointer">
+                <input type="checkbox" id="togglePillars" checked onchange="togglePillarsVisibility(this.checked)" class="accent-brand-500 rounded">
+                <span>Cột gióng đứng (Identity)</span>
+              </label>
+              <label class="flex items-center space-x-2 text-slate-300 cursor-pointer">
+                <input type="checkbox" id="toggleEdges" checked onchange="toggleEdgesVisibility(this.checked)" class="accent-brand-500 rounded">
+                <span>Liên kết đồ thị (Edges)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Floating Right Panel: Live Hop Log & Node Details -->
+          <div class="absolute top-3 right-3 w-72 max-h-[570px] bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-xl flex flex-col shadow-xl z-10 pointer-events-auto overflow-hidden">
+            <!-- Header Tabs inside panel -->
+            <div class="flex border-b border-slate-800 text-xs">
+              <button onclick="switch3DPanelTab('log')" id="btn3dTab-log" class="flex-1 py-2 font-bold text-center border-b-2 border-brand-500 text-brand-400">
+                Nhật Ký Routing
+              </button>
+              <button onclick="switch3DPanelTab('inspector')" id="btn3dTab-inspector" class="flex-1 py-2 font-bold text-center border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+                Chi Tiết Nút
+              </button>
+            </div>
+
+            <!-- Panel Content: Routing Log -->
+            <div id="panel3D-log" class="p-2.5 overflow-y-auto custom-scrollbar flex-1 space-y-1.5 text-xs max-h-[500px]">
+              <div class="text-center py-6 text-slate-500">
+                Nhập truy vấn bên trên và nhấn "Mô Phỏng 3D" để quan sát vết định tuyến.
+              </div>
+            </div>
+
+            <!-- Panel Content: Node Inspector -->
+            <div id="panel3D-inspector" class="p-3 overflow-y-auto custom-scrollbar flex-1 space-y-2 text-xs hidden max-h-[500px]">
+              <div id="nodeInspectorEmpty" class="text-center py-8 text-slate-500">
+                Nhấp chuột vào bất kỳ khối cầu nào trong không gian 3D để xem nội dung tài liệu.
+              </div>
+              <div id="nodeInspectorContent" class="hidden space-y-2 text-slate-300">
+                <div class="flex items-center justify-between pb-1 border-b border-slate-800">
+                  <span id="inspectId" class="font-mono text-brand-400 font-bold">Node #0</span>
+                  <span id="inspectLevel" class="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 font-mono">Layer 0</span>
+                </div>
+                <h4 id="inspectTitle" class="font-bold text-white text-xs leading-snug">Tiêu đề tài liệu</h4>
+                <div id="inspectCategory" class="text-[10px] text-emerald-400 font-medium">Danh mục</div>
+                <div id="inspectSummary" class="text-slate-400 leading-relaxed text-[11px] bg-slate-950/60 p-2 rounded border border-slate-800">
+                  Tóm tắt nội dung...
+                </div>
+                <div id="inspectCoords" class="text-[10px] font-mono text-slate-500">Tọa độ 3D: (0, 0, 0)</div>
+                <button onclick="openDocModalFrom3D()" class="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded text-xs transition">
+                  Xem toàn văn tài liệu
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom-Left Navigation Tip -->
+          <div class="absolute bottom-3 left-3 bg-slate-900/75 backdrop-blur-sm border border-slate-800/60 rounded-lg px-3 py-1.5 text-[10px] text-slate-400 font-mono pointer-events-none z-10 flex items-center space-x-2">
+            <i data-lucide="mouse-pointer" class="w-3 h-3 text-slate-500"></i>
+            <span>Chuột trái: Xoay 360° | Cuộn: Thu phóng | Chuột phải: Di chuyển</span>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+
+    <!-- ==================== TAB 3: PDF TEXT EXTRACTION & INDEXING ==================== -->
+    <div id="tab-pdf" class="tab-content hidden space-y-6">
+      <div class="bg-white dark:bg-slate-900/90 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-6 shadow-sm transition-colors space-y-6">
+        
+        <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 gap-4">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+              <i data-lucide="file-text" class="w-5 h-5 text-rose-500"></i>
+              <span>Trích Xuất Văn Bản Từ File PDF & Chèn Vào Chỉ Mục HNSW</span>
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Sử dụng thư viện <strong>PyMuPDF (fitz)</strong> để trích xuất toàn bộ văn bản tiếng Việt từ PDF, phân tách thành các đoạn ngữ nghĩa (chunks), mã hóa vector trên GPU và thêm trực tiếp vào CSDL & Đồ thị HNSW.
+            </p>
+          </div>
+          
+          <!-- One-click test with existing PDF -->
+          <button 
+            type="button" 
+            onclick="loadSamplePdf()" 
+            id="loadSamplePdfBtn"
+            class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:hover:bg-indigo-500/25 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 font-semibold text-xs rounded-xl transition flex items-center space-x-2 shadow-sm">
+            <i data-lucide="sparkles" class="w-4 h-4 text-indigo-500"></i>
+            <span>Thử Nghiệm Tải PDF Báo Cáo HNSW (45 Trang Có Sẵn)</span>
+          </button>
+        </div>
+
+        <!-- Drag & Drop Upload Form -->
+        <form id="pdfUploadForm" onsubmit="handlePdfUpload(event)" class="space-y-4">
+          <div 
+            id="dropZone"
+            onclick="document.getElementById('pdfFileInput').click()"
+            class="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-brand-500 dark:hover:border-brand-500 rounded-2xl p-8 text-center cursor-pointer bg-slate-50/60 dark:bg-slate-950/40 hover:bg-brand-50/30 dark:hover:bg-brand-950/20 transition group">
+            
+            <input type="file" id="pdfFileInput" accept=".pdf" class="hidden" onchange="handleFileSelected(this)">
+            <div class="w-14 h-14 mx-auto rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 flex items-center justify-center text-rose-500 mb-3 group-hover:scale-105 transition">
+              <i data-lucide="file-up" class="w-7 h-7"></i>
+            </div>
+            <div class="text-sm font-bold text-slate-800 dark:text-slate-200" id="dropZoneText">
+              Kéo thả file PDF vào đây, hoặc nhấn để chọn file từ máy tính
+            </div>
+            <div class="text-xs text-slate-500 mt-1" id="dropZoneSubtext">
+              Hỗ trợ file PDF mọi kích thước, tối ưu hóa xử lý Unicode tiếng Việt
+            </div>
+          </div>
+
+          <!-- Configuration options -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label class="block text-slate-700 dark:text-slate-300 font-medium mb-1.5">Chế độ phân đoạn nội dung (Chunking Mode):</label>
+              <select id="pdfChunkMode" class="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500">
+                <option value="page">Tách theo từng trang (Khuyên dùng - Mỗi trang là 1 tài liệu tìm kiếm chính xác)</option>
+                <option value="single">Ghép toàn bộ văn bản thành 1 tài liệu duy nhất</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-700 dark:text-slate-300 font-medium mb-1.5">Chủ đề / Phân loại (Category):</label>
+              <input type="text" id="pdfCategory" value="Tài liệu PDF Nghiên cứu" placeholder="vd: Luận văn, Tài liệu kỹ thuật, Báo cáo..." class="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500">
+            </div>
+          </div>
+
+          <!-- Upload button -->
+          <button 
+            type="submit" 
+            id="pdfSubmitBtn" 
+            disabled
+            class="w-full py-3 bg-brand-600 hover:bg-brand-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white font-bold text-xs rounded-xl transition flex items-center justify-center space-x-2 shadow-sm cursor-pointer disabled:cursor-not-allowed">
+            <i data-lucide="upload" class="w-4 h-4"></i>
+            <span>Bắt Đầu Tách Chữ & Nhúng Vào CSDL HNSW</span>
+          </button>
+        </form>
+
+        <!-- Progress / Result Card -->
+        <div id="pdfResultContainer" class="hidden bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h4 class="text-sm font-bold text-emerald-600 dark:text-emerald-400 flex items-center space-x-2">
+              <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+              <span id="pdfSuccessTitle">Đã trích xuất và lập chỉ mục HNSW thành công!</span>
+            </h4>
+            <button onclick="switchTab('search')" class="text-xs text-brand-600 dark:text-brand-400 hover:underline font-semibold flex items-center space-x-1">
+              <span>Đến trang tìm kiếm ngay</span>
+              <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <div class="text-xs text-slate-600 dark:text-slate-400 space-y-1" id="pdfSuccessDetails">
+            <!-- Details inserted dynamically -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+
+    <!-- ==================== TAB 4: ROUTING & INSERTION VISUALIZER 2D ==================== -->
+    <div id="tab-visualizer" class="tab-content hidden space-y-6">
+      <div class="bg-white dark:bg-slate-900/90 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-6 shadow-sm transition-colors">
+        <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 gap-4">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+              <i data-lucide="git-merge" class="w-5 h-5 text-brand-600 dark:text-brand-400"></i>
+              <span>Trực Quan Hóa Thuật Toán HNSW Đa Tầng (Bản 2D)</span>
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Phân tích chi tiết từng quyết định: Định tuyến truy vấn (K-NN Search) hoặc Quy trình chèn dữ liệu & chọn láng giềng theo Heuristic RNG Empty-Lune (Node Insertion / Indexing).
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- Mode switch: Search vs Insertion -->
+            <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+              <button id="btn2DModeSearch" onclick="switch2DVisualizerMode('search')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition bg-white dark:bg-slate-900 shadow-sm text-brand-600 dark:text-brand-400 flex items-center space-x-1.5">
+                <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                <span>Tìm Kiếm (Search)</span>
+              </button>
+              <button id="btn2DModeInsert" onclick="switch2DVisualizerMode('insert')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center space-x-1.5">
+                <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                <span>Chèn Node (Insertion)</span>
+              </button>
+            </div>
+            <span class="px-2.5 py-1 rounded bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300 border border-brand-200 dark:border-brand-500/20 font-mono text-xs" id="visQueryText">Query: Chưa có</span>
+          </div>
+        </div>
+
+        <!-- View 1: Search routing breadcrumbs -->
+        <div id="routingLayersView" class="py-6 space-y-6">
+          <div class="text-center py-8 text-slate-400 text-sm">
+            Vui lòng thực hiện một lượt tìm kiếm ở tab <strong class="text-brand-600 dark:text-brand-400">Tìm Kiếm Ngữ Nghĩa</strong> hoặc <strong class="text-brand-600 dark:text-brand-400">Không Gian 3D</strong> để xem hành trình định tuyến!
+          </div>
+        </div>
+
+        <!-- View 2: Node insertion process breadcrumbs -->
+        <div id="insertionLayersView" class="py-6 space-y-6 hidden">
+          <div class="text-center py-8 text-slate-400 text-sm">
+            Chưa có lượt chèn dữ liệu nào gần đây. Hãy sang tab <strong class="text-emerald-600 dark:text-emerald-400">Không Gian 3D</strong> (chọn "Chèn Dữ Liệu") hoặc tab <strong class="text-brand-600 dark:text-brand-400">Kho Tài Liệu</strong> để chèn một tài liệu mới và xem trực quan hóa chi tiết thuật toán!
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ==================== TAB 5: TOPOLOGY & TUNING ==================== -->
+    <div id="tab-topology" class="tab-content hidden space-y-6">
+      
+      <!-- Graph Overview Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-slate-500 dark:text-slate-400">Tổng Số Nút Dữ Liệu (N)</div>
+          <div class="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1" id="topoTotalNodes">-</div>
+          <div class="text-[11px] text-slate-400 mt-1">Vectors trong kho dữ liệu</div>
+        </div>
+        <div class="bg-white dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-slate-500 dark:text-slate-400">Số Chiều Không Gian (d)</div>
+          <div class="text-2xl font-bold font-mono text-brand-600 dark:text-brand-400 mt-1" id="topoDim">384</div>
+          <div class="text-[11px] text-slate-400 mt-1">Độ dài vector embedding</div>
+        </div>
+        <div class="bg-white dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-slate-500 dark:text-slate-400">Độ Sâu Phân Tầng (Max Level)</div>
+          <div class="text-2xl font-bold font-mono text-sky-600 dark:text-cyan-400 mt-1" id="topoMaxLevel">-</div>
+          <div class="text-[11px] text-slate-400 mt-1" id="topoEnterPoint">Điểm vào: Node #0</div>
+        </div>
+        <div class="bg-white dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-slate-500 dark:text-slate-400">Dung Lượng RAM Ước Tính</div>
+          <div class="text-2xl font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-1" id="topoMemory">-</div>
+          <div class="text-[11px] text-slate-400 mt-1">Vectors + Cấu trúc liên kết đồ thị</div>
+        </div>
+      </div>
+
+      <!-- Layer Breakdown & Degree Stats -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Layer distribution -->
+        <div class="bg-white dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2 mb-3">
+            <i data-lucide="layers" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
+            <span>Phân Bố Số Lượng Nút Qua Từng Tầng (Layer Hierarchy)</span>
+          </h3>
+          <div id="topoLayerList" class="space-y-3">
+            <!-- Layers will be rendered here -->
+          </div>
+        </div>
+
+        <!-- Hyperparameter Tuning Panel -->
+        <div class="bg-white dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2 mb-2">
+            <i data-lucide="sliders" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>
+            <span>Tinh Chỉnh Siêu Tham Số HNSW Trực Tiếp</span>
+          </h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+            Điều chỉnh tham số và tái cấu trúc đồ thị ngay lập tức để trải nghiệm sự đánh đổi giữa thời gian lập chỉ mục và độ chính xác tìm kiếm.
+          </p>
+
+          <form onsubmit="handleReindex(event)" class="space-y-4 text-xs">
+            <div>
+              <div class="flex justify-between text-slate-700 dark:text-slate-300 font-medium mb-1">
+                <span>Số liên kết tối đa mỗi nút (M):</span>
+                <span id="tuneMVal" class="font-mono text-brand-600 dark:text-brand-400 font-bold">16</span>
+              </div>
+              <input type="range" id="tuneM" min="4" max="48" value="16" class="w-full accent-brand-600 cursor-pointer" oninput="tuneMVal.innerText = this.value">
+              <span class="text-[10px] text-slate-400">M càng lớn: Recall tăng, RAM và thời gian lập chỉ mục tăng.</span>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-slate-700 dark:text-slate-300 font-medium mb-1">
+                <span>Độ rộng chùm khi lập chỉ mục (efConstruction):</span>
+                <span id="tuneEfConstVal" class="font-mono text-brand-600 dark:text-brand-400 font-bold">100</span>
+              </div>
+              <input type="range" id="tuneEfConst" min="20" max="250" value="100" step="10" class="w-full accent-brand-600 cursor-pointer" oninput="tuneEfConstVal.innerText = this.value">
+              <span class="text-[10px] text-slate-400">efConstruction cao giúp tối ưu hóa chất lượng liên kết lân cận.</span>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-slate-700 dark:text-slate-300 font-medium mb-1">
+                <span>Độ rộng chùm khi tìm kiếm (efSearch):</span>
+                <span id="tuneEfSearchVal" class="font-mono text-brand-600 dark:text-brand-400 font-bold">50</span>
+              </div>
+              <input type="range" id="tuneEfSearch" min="10" max="150" value="50" step="5" class="w-full accent-brand-600 cursor-pointer" oninput="tuneEfSearchVal.innerText = this.value">
+              <span class="text-[10px] text-slate-400">efSearch càng lớn: Recall tiệm cận 100%, độ trễ tìm kiếm tăng nhẹ.</span>
+            </div>
+
+            <button 
+              type="submit" 
+              id="reindexBtn"
+              class="w-full py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-lg transition flex items-center justify-center space-x-2 shadow-sm">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              <span>Tái Xây Dựng Chỉ Mục (Rebuild HNSW Index)</span>
+            </button>
+          </form>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- ==================== TAB 6: BENCHMARK SUITE ==================== -->
+    <div id="tab-benchmark" class="tab-content hidden space-y-6">
+      
+      <div class="bg-white dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-6 shadow-sm transition-colors">
+        <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 gap-4">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+              <i data-lucide="gauge" class="w-5 h-5 text-amber-500"></i>
+              <span>Đánh Giá Hiệu Năng HNSW: Đường Cong Pareto Frontier</span>
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Thực thi bộ 6 câu hỏi đa lĩnh vực trên các giá trị efSearch khác nhau để đo lường tương quan giữa Recall@K và Độ trễ tìm kiếm.
+            </p>
+          </div>
+          <button 
+            onclick="runBenchmark()" 
+            id="runBenchmarkBtn"
+            class="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs rounded-xl transition flex items-center space-x-2 shadow-sm">
+            <i data-lucide="play" class="w-4 h-4"></i>
+            <span>Chạy Thử Nghiệm Benchmark</span>
+          </button>
+        </div>
+
+        <!-- Chart Container -->
+        <div class="py-6">
+          <div class="h-72 w-full">
+            <canvas id="benchmarkChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Benchmark Table -->
+        <div class="mt-4 overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="bg-slate-50 dark:bg-slate-950/60 text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+              <tr>
+                <th class="p-3">efSearch</th>
+                <th class="p-3">Recall@5 (%)</th>
+                <th class="p-3">HNSW Latency (ms)</th>
+                <th class="p-3">Brute-Force (ms)</th>
+                <th class="p-3">Khoảng cách Tính toán</th>
+                <th class="p-3">Tốc độ Tăng tốc</th>
+              </tr>
+            </thead>
+            <tbody id="benchmarkTableBody" class="divide-y divide-slate-200 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+              <tr>
+                <td colspan="6" class="p-4 text-center text-slate-400 font-sans">
+                  Nhấn nút "Chạy Thử Nghiệm Benchmark" ở trên để tạo bảng dữ liệu đo lường thực tế.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- ==================== TAB 7: CORPUS MANAGER ==================== -->
+    <div id="tab-corpus" class="tab-content hidden space-y-6">
+      
+      <!-- Add new document form -->
+      <div class="bg-white dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 shadow-sm transition-colors">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2 mb-3">
+          <i data-lucide="plus-circle" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
+          <span>Thêm Văn Bản Thủ Công Vào CSDL & Chỉ Mục HNSW</span>
+        </h3>
+        <form onsubmit="handleAddDocument(event)" class="space-y-3 text-xs">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-slate-700 dark:text-slate-300 font-medium mb-1">Tiêu đề tài liệu:</label>
+              <input type="text" id="newDocTitle" required placeholder="vd: Cơ chế Đồng thuận Paxos trong Hệ Phân Tán" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand-500">
+            </div>
+            <div>
+              <label class="block text-slate-700 dark:text-slate-300 font-medium mb-1">Chủ đề / Phân loại:</label>
+              <input type="text" id="newDocCategory" value="Khoa học & Kỹ thuật" placeholder="vd: AI, Blockchain, Y sinh..." class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand-500">
+            </div>
+          </div>
+          <div>
+            <label class="block text-slate-700 dark:text-slate-300 font-medium mb-1">Nội dung chi tiết tài liệu:</label>
+            <textarea id="newDocContent" rows="3" required placeholder="Nhập văn bản chi tiết. Hệ thống sẽ tự động chuyển đổi thành vector embedding 384 chiều bằng PyTorch và chèn vào đồ thị HNSW..." class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand-500"></textarea>
+          </div>
+          <div class="flex items-center space-x-3 pt-1">
+            <button type="submit" id="addDocBtn" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-lg transition flex items-center space-x-2 shadow-sm">
+              <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+              <span>Mã hóa Vector & Chèn vào HNSW</span>
+            </button>
+            <button type="button" onclick="handleAddDocumentAndVisualize()" id="addDocVisBtn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition flex items-center space-x-2 shadow-sm">
+              <i data-lucide="play-circle" class="w-4 h-4"></i>
+              <span>Lưu & Xem Mô Phỏng Chèn 3D</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Corpus Documents List -->
+      <div class="bg-white dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 shadow-sm transition-colors">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+            <i data-lucide="book-open" class="w-4 h-4 text-sky-600 dark:text-cyan-400"></i>
+            <span>Danh Sách Toàn Bộ Tài Liệu Trong Kho (<span id="corpusTotalCount">0</span>)</span>
+          </h3>
+          <button onclick="switchTab('pdf')" class="text-xs text-rose-600 dark:text-rose-400 hover:underline font-semibold flex items-center space-x-1">
+            <i data-lucide="file-up" class="w-3.5 h-3.5"></i>
+            <span>Tách chữ từ file PDF</span>
+          </button>
+        </div>
+        <div id="corpusListContainer" class="divide-y divide-slate-100 dark:divide-slate-800 mt-2 space-y-2">
+          <!-- Documents list rendered here -->
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Document Full View Modal -->
+  <div id="docModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <h3 id="modalTitle" class="text-base font-bold text-slate-900 dark:text-white">Tiêu đề tài liệu</h3>
+        <button onclick="closeDocModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-5 overflow-y-auto custom-scrollbar space-y-4 text-sm text-slate-700 dark:text-slate-300">
+        <div class="flex items-center space-x-2 text-xs">
+          <span id="modalCategory" class="px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300 font-medium">Category</span>
+          <span id="modalDocId" class="text-slate-400 font-mono">ID: #0</span>
+        </div>
+        <div class="bg-slate-50 dark:bg-slate-950/50 p-3 rounded-xl border border-slate-200 dark:border-slate-800/80 text-xs italic text-slate-500 dark:text-slate-400" id="modalSummary">
+          Tóm tắt
+        </div>
+        <div id="modalContent" class="leading-relaxed whitespace-pre-line text-slate-800 dark:text-slate-200">
+          Nội dung đầy đủ...
+        </div>
+      </div>
+      <div class="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+        <button onclick="closeDocModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-white text-xs font-semibold rounded-lg">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Application Logic -->
+  <script>
+    let activeTab = 'search';
+    let lastSearchResults = null;
+    let lastInsertionResults = null;
+    let visualizerMode = 'search';
+    let current3DMode = 'search';
+    let dynamicEdgeLines = [];
+    let graphDirty3D = false; // true sau khi chèn: cạnh vẽ sẵn chưa phản ánh việc tỉa cạnh
+    let benchmarkChartInstance = null;
+    let selectedPdfFile = null;
+
+    // Theme Management: Default is Light Theme
+    function initTheme() {
+      const savedTheme = localStorage.getItem('hnsw_theme') || 'light';
+      if (savedTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+        updateThemeIcon(true);
+      } else {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+        updateThemeIcon(false);
+      }
+    }
+
+    function toggleTheme() {
+      const isDark = document.documentElement.classList.contains('dark');
+      if (isDark) {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('light');
+        localStorage.setItem('hnsw_theme', 'light');
+        updateThemeIcon(false);
+      } else {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+        localStorage.setItem('hnsw_theme', 'dark');
+        updateThemeIcon(true);
+      }
+      if (benchmarkChartInstance && lastBenchmarkData) {
+        renderBenchmarkChart(lastBenchmarkData);
+      }
+    }
+
+    function updateThemeIcon(isDark) {
+      const btn = document.getElementById('themeToggleBtn');
+      if (!btn) return;
+      if (isDark) {
+        btn.innerHTML = `<i data-lucide="moon" class="w-4 h-4 text-indigo-400"></i>`;
+      } else {
+        btn.innerHTML = `<i data-lucide="sun" class="w-4 h-4 text-amber-500"></i>`;
+      }
+      lucide.createIcons();
+    }
+
+    // Switch between tabs
+    function switchTab(tabName) {
+      activeTab = tabName;
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(el => {
+        el.classList.remove('border-brand-600', 'text-brand-600', 'dark:border-brand-500', 'dark:text-brand-400');
+        el.classList.add('border-transparent', 'text-slate-600', 'dark:text-slate-400');
+      });
+
+      const targetTab = document.getElementById(`tab-${tabName}`);
+      const targetBtn = document.getElementById(`tabBtn-${tabName}`);
+      if (targetTab) targetTab.classList.remove('hidden');
+      if (targetBtn) {
+        targetBtn.classList.add('border-brand-600', 'text-brand-600', 'dark:border-brand-500', 'dark:text-brand-400');
+        targetBtn.classList.remove('border-transparent', 'text-slate-600', 'dark:text-slate-400');
+      }
+
+      if (tabName === '3d') {
+        init3DSceneIfNeeded();
+        on3DContainerResize();
+        if (!graphData3D) load3DGraphData();
+      }
+      if (tabName === 'topology') loadStats();
+      if (tabName === 'corpus') loadCorpus();
+      if (tabName === 'visualizer') {
+        if (visualizerMode === 'insert' && lastInsertionResults) {
+          renderInsertionVisualizer(lastInsertionResults);
+        } else if (lastSearchResults) {
+          renderRoutingVisualizer(lastSearchResults);
+        }
+      }
+
+      lucide.createIcons();
+    }
+
+    // Set search query helper
+    function setQuery(text) {
+      document.getElementById('searchInput').value = text;
+      handleSearch(new Event('submit'));
+    }
+
+    // Handle Semantic Search
+    async function handleSearch(e) {
+      if (e) e.preventDefault();
+      const query = document.getElementById('searchInput').value.trim();
+      if (!query) return;
+
+      const topK = parseInt(document.getElementById('topKInput').value);
+      const efSearch = parseInt(document.getElementById('efSearchInput').value);
+      const compareGt = document.getElementById('compareGtCheckbox').checked;
+      const searchBtn = document.getElementById('searchBtn');
+
+      searchBtn.disabled = true;
+      searchBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang tìm...</span>`;
+      lucide.createIcons();
+
+      try {
+        const response = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, top_k: topK, ef_search: efSearch, compare_gt: compareGt })
+        });
+        const data = await response.json();
+        lastSearchResults = data;
+        renderSearchResults(data);
+
+        // Also prepare 3D search trace
+        if (data.query_3d) {
+          setup3DSearchData(data);
+        }
+      } catch (err) {
+        console.error('Search error:', err);
+        alert('Lỗi tìm kiếm: ' + err.message);
+      } finally {
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = `<span>Tìm kiếm</span><i data-lucide="arrow-right" class="w-4 h-4"></i>`;
+        lucide.createIcons();
+      }
+    }
+
+    // Render Search Results
+    function renderSearchResults(data) {
+      const hud = document.getElementById('metricsHud');
+      hud.classList.remove('hidden');
+
+      document.getElementById('metricHnswLatency').innerText = data.metrics.hnsw_latency_ms.toFixed(2);
+      document.getElementById('metricEmbLatency').innerText = data.metrics.embedding_latency_ms.toFixed(2);
+
+      if (data.ground_truth) {
+        document.getElementById('metricRecall').innerText = data.ground_truth.recall_pct + '%';
+        document.getElementById('metricCalcSavings').innerText = data.ground_truth.calc_savings_pct + '%';
+        document.getElementById('metricCalcFraction').innerText = `${data.metrics.hnsw_dist_comps} / ${data.ground_truth.gt_dist_comps} phép tính`;
+      }
+
+      const container = document.getElementById('resultsContainer');
+      if (!data.results || data.results.length === 0) {
+        container.innerHTML = `<div class="p-8 text-center text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">Không tìm thấy tài liệu phù hợp.</div>`;
+        return;
+      }
+
+      let html = `<div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
+        <span>Tìm thấy <strong class="text-slate-800 dark:text-white font-semibold">${data.results.length}</strong> kết quả ngữ nghĩa hàng đầu (Top-${data.results.length}):</span>
+        <div class="flex items-center space-x-3">
+          <button onclick="switchTab('3d')" class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center space-x-1">
+            <i data-lucide="box" class="w-3.5 h-3.5"></i>
+            <span>Mô phỏng trong Không Gian 3D</span>
+          </button>
+          <button onclick="switchTab('visualizer')" class="text-brand-600 dark:text-brand-400 hover:text-brand-500 font-semibold flex items-center space-x-1">
+            <span>Xem đường nhảy 2D</span>
+            <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>`;
+
+      data.results.forEach((r, idx) => {
+        const scoreColor = r.score_pct >= 55 ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/30' :
+                           r.score_pct >= 35 ? 'text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-500/10 dark:border-amber-500/30' :
+                                               'text-slate-600 bg-slate-100 border-slate-200 dark:text-slate-400 dark:bg-slate-800 dark:border-slate-700';
+
+        html += `
+          <div class="bg-white dark:bg-slate-900/90 border border-slate-200/90 dark:border-slate-800 hover:border-brand-400 dark:hover:border-slate-700 rounded-2xl p-5 transition shadow-sm space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center space-x-2">
+                <span class="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-mono text-xs font-bold text-slate-600 dark:text-slate-300">#${r.rank}</span>
+                <span class="text-xs px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/20 font-medium">${r.category}</span>
+                <span class="text-slate-400 font-mono text-xs">Node ID: #${r.id}</span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <span class="text-xs px-2.5 py-1 rounded-lg border font-mono font-bold ${scoreColor}">
+                  ${r.score_pct}% Match
+                </span>
+                <span class="text-xs font-mono text-slate-400">Dist: ${r.distance}</span>
+              </div>
+            </div>
+
+            <div>
+              <h4 class="text-base font-bold text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-300 transition cursor-pointer" onclick="openDocModal(${r.id})">
+                ${r.title}
+              </h4>
+              <p class="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                ${r.snippet}
+              </p>
+            </div>
+
+            <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+              <div class="flex flex-wrap gap-1">
+                ${(r.tags || []).map(t => `<span class="px-2 py-0.5 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 rounded text-[10px] border border-slate-200 dark:border-slate-800">#${t}</span>`).join('')}
+              </div>
+              <button onclick="openDocModal(${r.id})" class="text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 font-semibold flex items-center space-x-1">
+                <span>Chi tiết tài liệu</span>
+                <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+      lucide.createIcons();
+    }
+
+    // PDF Upload Handlers
+    function handleFileSelected(input) {
+      if (input.files && input.files[0]) {
+        selectedPdfFile = input.files[0];
+        const fileSizeMB = (selectedPdfFile.size / (1024 * 1024)).toFixed(2);
+        document.getElementById('dropZoneText').innerText = `Đã chọn: ${selectedPdfFile.name} (${fileSizeMB} MB)`;
+        document.getElementById('dropZoneSubtext').innerText = "Nhấn nút 'Bắt Đầu Tách Chữ & Nhúng Vào CSDL HNSW' bên dưới để xử lý.";
+        document.getElementById('pdfSubmitBtn').disabled = false;
+      }
+    }
+
+    // Drag and Drop listeners
+    const dropZone = document.getElementById('dropZone');
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.add('border-brand-500', 'bg-brand-50/40');
+      }, false);
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-brand-500', 'bg-brand-50/40');
+      }, false);
+    });
+    dropZone.addEventListener('drop', (e) => {
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        document.getElementById('pdfFileInput').files = e.dataTransfer.files;
+        handleFileSelected(document.getElementById('pdfFileInput'));
+      }
+    });
+
+    async function handlePdfUpload(e) {
+      e.preventDefault();
+      if (!selectedPdfFile) return;
+
+      const chunkMode = document.getElementById('pdfChunkMode').value;
+      const category = document.getElementById('pdfCategory').value;
+      const btn = document.getElementById('pdfSubmitBtn');
+
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang tách chữ (PyMuPDF) & Nhúng vector GPU...</span>`;
+      lucide.createIcons();
+
+      const formData = new FormData();
+      formData.append('file', selectedPdfFile);
+      formData.append('chunk_mode', chunkMode);
+      formData.append('category', category);
+
+      try {
+        const response = await fetch('/api/upload-pdf', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+
+        showPdfSuccess(data);
+        loadStats();
+        load3DGraphData(true); // reload 3D
+      } catch (err) {
+        alert('Lỗi nạp PDF: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="upload" class="w-4 h-4"></i><span>Bắt Đầu Tách Chữ & Nhúng Vào CSDL HNSW</span>`;
+        lucide.createIcons();
+      }
+    }
+
+    // One-click sample PDF loader
+    async function loadSamplePdf() {
+      const btn = document.getElementById('loadSamplePdfBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang trích xuất 45 trang...</span>`;
+      lucide.createIcons();
+
+      try {
+        const response = await fetch('/api/upload-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_path: 'Bao_Cao_Chuyen_Sau_HNSW.pdf',
+            chunk_mode: 'page',
+            category: 'Báo Cáo Nghiên Cứu HNSW'
+          })
+        });
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+
+        showPdfSuccess(data);
+        loadStats();
+        load3DGraphData(true); // reload 3D
+      } catch (err) {
+        alert('Lỗi nạp file mẫu: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="sparkles" class="w-4 h-4 text-indigo-500"></i><span>Thử Nghiệm Tải PDF Báo Cáo HNSW (45 Trang Có Sẵn)</span>`;
+        lucide.createIcons();
+      }
+    }
+
+    function showPdfSuccess(data) {
+      const resContainer = document.getElementById('pdfResultContainer');
+      resContainer.classList.remove('hidden');
+
+      document.getElementById('pdfSuccessTitle').innerText = `Đã trích xuất thành công ${data.total_chunks} đoạn/trang từ "${data.filename}"!`;
+      const firstChunkId = data.chunks && data.chunks.length > 0 ? data.chunks[0].id : null;
+      document.getElementById('pdfSuccessDetails').innerHTML = `
+        <div>• <strong>Số vector đã tạo & chèn:</strong> ${data.total_chunks} vectors 384-chiều vào đồ thị HNSW.</div>
+        <div>• <strong>Tổng số tài liệu hiện tại:</strong> ${data.stats.total_nodes} nodes (Độ sâu tối đa: Layer ${data.stats.max_level}).</div>
+        <div>• <strong>Các trang mẫu:</strong> ${data.chunks.slice(0, 4).map(c => `<span class="inline-block px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[11px] mr-1 mt-1">${c.title}</span>`).join('')} ...</div>
+        ${firstChunkId !== null ? `
+          <div class="pt-2 flex items-center space-x-2">
+            <button onclick="focusDocIn3D(${firstChunkId})" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold flex items-center space-x-1.5 shadow-sm text-xs transition">
+              <i data-lucide="box" class="w-3.5 h-3.5"></i>
+              <span>Xem Vị Trí Chunk #${firstChunkId} Trong Không Gian 3D</span>
+            </button>
+          </div>
+        ` : ''}
+      `;
+      lucide.createIcons();
+    }
+
+    // =========================================================================
+    // THREE.JS 3D REAL-TIME HNSW VISUALIZER ENGINE
+    // =========================================================================
+    let scene3D, camera3D, renderer3D, controls3D;
+    let is3DInitialized = false;
+    let graphData3D = null;
+    let nodeMeshes = [];
+    let edgeLines = [];
+    let pillarLines = [];
+    let planeObjects = [];
+    let query3DMesh = null;
+    let activeBeamLine = null;
+    let highlightHaloMeshes = [];
+    
+    // Animation Playback State
+    let currentAnimationSteps = [];
+    let currentStepIdx = 0;
+    let isPlaying = false;
+    let animationInterval = null;
+    let selectedInspectNodeId = null;
+
+    const LAYER_THEMES = [
+      { colorHex: 0x10b981, cssColor: '#10b981', name: 'Layer 0 (Tầng Đáy)' },
+      { colorHex: 0x3b82f6, cssColor: '#3b82f6', name: 'Layer 1 (Tầng Trung Gian)' },
+      { colorHex: 0xef4444, cssColor: '#ef4444', name: 'Layer 2 (Tầng Đỉnh)' },
+      { colorHex: 0xf59e0b, cssColor: '#f59e0b', name: 'Layer 3 (Tầng Siêu Đỉnh)' },
+      { colorHex: 0x8b5cf6, cssColor: '#8b5cf6', name: 'Layer 4' }
+    ];
+
+    function init3DSceneIfNeeded() {
+      if (is3DInitialized) return;
+      const canvas = document.getElementById('webgl3d-canvas');
+      const container = document.getElementById('viewport3DContainer');
+      const width = container.clientWidth || 900;
+      const height = container.clientHeight || 620;
+
+      // 1. Scene & Fog
+      scene3D = new THREE.Scene();
+      scene3D.background = new THREE.Color(0x0a0f1d);
+      scene3D.fog = new THREE.FogExp2(0x0a0f1d, 0.0015);
+
+      // 2. Camera
+      camera3D = new THREE.PerspectiveCamera(45, width / height, 1, 3000);
+      camera3D.position.set(220, 200, 260);
+
+      // 3. Renderer
+      renderer3D = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false });
+      renderer3D.setSize(width, height);
+      renderer3D.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      // 4. OrbitControls
+      controls3D = new THREE.OrbitControls(camera3D, renderer3D.domElement);
+      controls3D.enableDamping = true;
+      controls3D.dampingFactor = 0.08;
+      controls3D.maxDistance = 900;
+      controls3D.minDistance = 30;
+      controls3D.target.set(0, 45, 0);
+
+      // 5. Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+      scene3D.add(ambientLight);
+
+      const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+      dirLight1.position.set(200, 300, 150);
+      scene3D.add(dirLight1);
+
+      const dirLight2 = new THREE.DirectionalLight(0x6366f1, 0.6);
+      dirLight2.position.set(-200, -100, -150);
+      scene3D.add(dirLight2);
+
+      // 6. Raycasting on Click
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+
+      canvas.addEventListener('click', (event) => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera3D);
+        const intersects = raycaster.intersectObjects(nodeMeshes, false);
+        if (intersects.length > 0) {
+          const clickedNode = intersects[0].object.userData;
+          inspect3DNode(clickedNode);
+        }
+      });
+
+      // 7. Animation Loop
+      function animate3D() {
+        requestAnimationFrame(animate3D);
+        controls3D.update();
+        
+        // Pulse highlight rings if any
+        const time = Date.now() * 0.003;
+        for (const ring of highlightHaloMeshes) {
+          const s = 1.0 + Math.sin(time * 3) * 0.2;
+          ring.scale.set(s, s, s);
+        }
+
+        renderer3D.render(scene3D, camera3D);
+      }
+      animate3D();
+
+      window.addEventListener('resize', on3DContainerResize);
+      is3DInitialized = true;
+    }
+
+    function on3DContainerResize() {
+      if (!renderer3D || !camera3D) return;
+      const container = document.getElementById('viewport3DContainer');
+      const width = container.clientWidth || 900;
+      const height = container.clientHeight || 620;
+      camera3D.aspect = width / height;
+      camera3D.updateProjectionMatrix();
+      renderer3D.setSize(width, height);
+    }
+
+    // Fetch and construct 3D scene from real HNSW index
+    async function load3DGraphData(forceRebuild = false) {
+      try {
+        const res = await fetch('/api/3d-graph');
+        graphData3D = await res.json();
+        document.getElementById('totalNodes3DBadge').innerText = `${graphData3D.total_nodes} nodes`;
+        build3DGraphMeshes();
+      } catch (err) {
+        console.error('Failed to load 3D graph data:', err);
+      }
+    }
+
+    function build3DGraphMeshes() {
+      if (!scene3D || !graphData3D) return;
+
+      // Clean old objects
+      for (const m of nodeMeshes) scene3D.remove(m);
+      for (const l of edgeLines) scene3D.remove(l);
+      for (const p of pillarLines) scene3D.remove(p);
+      for (const pl of planeObjects) scene3D.remove(pl);
+      for (const h of highlightHaloMeshes) scene3D.remove(h);
+      for (const d of dynamicEdgeLines) scene3D.remove(d);
+      if (query3DMesh) scene3D.remove(query3DMesh);
+      if (activeBeamLine) scene3D.remove(activeBeamLine);
+
+      dynamicEdgeLines = [];
+      nodeMeshes = [];
+      edgeLines = [];
+      pillarLines = [];
+      planeObjects = [];
+      highlightHaloMeshes = [];
+      query3DMesh = null;
+      activeBeamLine = null;
+
+      const maxLevel = graphData3D.max_level || 0;
+      const planeSize = 220;
+
+      // 1. Create Floating Layer Planes
+      const togglesContainer = document.getElementById('layerFilterToggles');
+      let togglesHtml = '';
+
+      for (let l = 0; l <= maxLevel; l++) {
+        const theme = LAYER_THEMES[l % LAYER_THEMES.length];
+        const yPos = l * 75.0;
+
+        // Grid
+        const grid = new THREE.GridHelper(planeSize, 20, theme.colorHex, 0x1e293b);
+        grid.position.y = yPos;
+        grid.material.opacity = 0.25;
+        grid.material.transparent = true;
+        scene3D.add(grid);
+        planeObjects.push(grid);
+
+        // Transparent Plane Mesh
+        const pGeom = new THREE.PlaneGeometry(planeSize, planeSize);
+        const pMat = new THREE.MeshBasicMaterial({
+          color: theme.colorHex,
+          transparent: true,
+          opacity: 0.04,
+          side: THREE.DoubleSide
+        });
+        const pMesh = new THREE.Mesh(pGeom, pMat);
+        pMesh.rotation.x = Math.PI / 2;
+        pMesh.position.y = yPos;
+        scene3D.add(pMesh);
+        planeObjects.push(pMesh);
+
+        // Plane border wire
+        const wireGeom = new THREE.EdgesGeometry(pGeom);
+        const wireMat = new THREE.LineBasicMaterial({ color: theme.colorHex, transparent: true, opacity: 0.5 });
+        const wire = new THREE.LineSegments(wireGeom, wireMat);
+        wire.rotation.x = Math.PI / 2;
+        wire.position.y = yPos;
+        scene3D.add(wire);
+        planeObjects.push(wire);
+
+        // UI Layer filter toggle
+        togglesHtml += `
+          <label class="flex items-center space-x-2 text-slate-300 cursor-pointer">
+            <input type="checkbox" checked onchange="toggleLayerLevel(${l}, this.checked)" class="rounded accent-brand-500">
+            <span class="w-2.5 h-2.5 rounded-full inline-block" style="background-color: ${theme.cssColor};"></span>
+            <span>Layer ${l} (${graphData3D.layers[l]?.node_count || 0} nút)</span>
+          </label>
+        `;
+      }
+      togglesContainer.innerHTML = togglesHtml;
+
+      // 2. Vertical Identity Pillars (connecting same document across layers)
+      for (const node of graphData3D.nodes) {
+        if (node.level > 0) {
+          const topY = node.level * 75.0;
+          const botY = 0.0;
+          const pts = [
+            new THREE.Vector3(node.x, topY, node.z),
+            new THREE.Vector3(node.x, botY, node.z)
+          ];
+          const pillarGeom = new THREE.BufferGeometry().setFromPoints(pts);
+          const pillarMat = new THREE.LineDashedMaterial({
+            color: 0x64748b,
+            dashSize: 2.5,
+            gapSize: 2.5,
+            transparent: true,
+            opacity: 0.3
+          });
+          const pillar = new THREE.Line(pillarGeom, pillarMat);
+          pillar.computeLineDistances();
+          scene3D.add(pillar);
+          pillarLines.push(pillar);
+        }
+      }
+
+      // 3. Intra-layer Edges
+      for (const layer of graphData3D.layers) {
+        const l = layer.level;
+        const yPos = l * 75.0;
+        const theme = LAYER_THEMES[l % LAYER_THEMES.length];
+        const opacity = l === maxLevel ? 0.85 : (l === 0 ? 0.28 : 0.6);
+
+        const edgeMat = new THREE.LineBasicMaterial({
+          color: theme.colorHex,
+          transparent: true,
+          opacity: opacity,
+          linewidth: l === 0 ? 1 : 2
+        });
+
+        const pts = [];
+        const edgesMap = layer.edges || {};
+        const nodeById = new Map(graphData3D.nodes.map(n => [n.id, n]));
+        const drawn = new Set(); // mỗi cặp (u, v) vẽ một lần, dù cạnh có ở một hay cả hai danh sách
+
+        for (const [uStr, neighbors] of Object.entries(edgesMap)) {
+          const uId = parseInt(uStr);
+          const uNode = nodeById.get(uId);
+          if (!uNode) continue;
+
+          for (const vId of neighbors) {
+            const key = uId < vId ? `${uId}-${vId}` : `${vId}-${uId}`;
+            if (drawn.has(key)) continue;
+            const vNode = nodeById.get(vId);
+            if (vNode) {
+              drawn.add(key);
+              pts.push(new THREE.Vector3(uNode.x, yPos, uNode.z));
+              pts.push(new THREE.Vector3(vNode.x, yPos, vNode.z));
+            }
+          }
+        }
+
+        if (pts.length > 0) {
+          const geom = new THREE.BufferGeometry().setFromPoints(pts);
+          const lines = new THREE.LineSegments(geom, edgeMat);
+          lines.userData = { level: l };
+          scene3D.add(lines);
+          edgeLines.push(lines);
+        }
+      }
+
+      // 4. Node Spheres (Placed on all layers 0..node.level)
+      const sphereGeom = new THREE.SphereGeometry(1, 16, 16);
+
+      for (const node of graphData3D.nodes) {
+        for (let l = 0; l <= node.level; l++) {
+          const yPos = l * 75.0;
+          const theme = LAYER_THEMES[l % LAYER_THEMES.length];
+          const radius = l === maxLevel ? 3.4 : (l === 0 ? 2.2 : 2.8);
+
+          const mat = new THREE.MeshStandardMaterial({
+            color: theme.colorHex,
+            roughness: 0.3,
+            metalness: 0.2,
+            emissive: theme.colorHex,
+            emissiveIntensity: l === maxLevel ? 0.35 : 0.15
+          });
+
+          const mesh = new THREE.Mesh(sphereGeom, mat);
+          mesh.scale.set(radius, radius, radius);
+          mesh.position.set(node.x, yPos, node.z);
+          mesh.userData = {
+            docId: node.id,
+            level: l,
+            maxLevel: node.level,
+            title: node.title,
+            category: node.category,
+            summary: node.summary,
+            origColor: theme.colorHex,
+            origScale: radius,
+            x: node.x,
+            z: node.z
+          };
+          scene3D.add(mesh);
+          nodeMeshes.push(mesh);
+        }
+      }
+
+      // 5. Entry Node special marker
+      const enterId = graphData3D.enter_point;
+      const enterMesh = nodeMeshes.find(m => m.userData.docId === enterId && m.userData.level === maxLevel);
+      if (enterMesh) {
+        enterMesh.material.emissive.setHex(0xf59e0b);
+        enterMesh.material.emissiveIntensity = 0.8;
+      }
+    }
+
+    // Mode switch: Search vs Insertion in 3D Tab
+    function switch3DMode(mode) {
+      current3DMode = mode;
+      const btnSearch = document.getElementById('btn3DModeSearch');
+      const btnInsert = document.getElementById('btn3DModeInsert');
+      const formSearch = document.getElementById('form3DSearch');
+      const formInsert = document.getElementById('form3DInsert');
+
+      if (mode === 'search') {
+        btnSearch.classList.add('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-brand-600', 'dark:text-brand-400');
+        btnSearch.classList.remove('text-slate-500', 'dark:text-slate-400');
+        btnInsert.classList.remove('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-brand-600', 'dark:text-brand-400');
+        btnInsert.classList.add('text-slate-500', 'dark:text-slate-400');
+        formSearch.classList.remove('hidden');
+        formInsert.classList.add('hidden');
+      } else {
+        btnInsert.classList.add('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-brand-600', 'dark:text-brand-400');
+        btnInsert.classList.remove('text-slate-500', 'dark:text-slate-400');
+        btnSearch.classList.remove('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-brand-600', 'dark:text-brand-400');
+        btnSearch.classList.add('text-slate-500', 'dark:text-slate-400');
+        formInsert.classList.remove('hidden');
+        formSearch.classList.add('hidden');
+      }
+      lucide.createIcons();
+    }
+
+    // Preset filler for quick insertion testing
+    function fillInsertPreset(type) {
+      const titleEl = document.getElementById('insert3DTitle');
+      const catEl = document.getElementById('insert3DCategory');
+      const contentEl = document.getElementById('insert3DContent');
+
+      if (type === 'moe') {
+        titleEl.value = 'Kiến Trúc DeepSeek-V3 MoE & MLA';
+        catEl.value = 'Trí Tuệ Nhân Tạo';
+        contentEl.value = 'Mô hình Mixture of Experts chia nhỏ các tầng FFN thành 256 chuyên gia định tuyến kết hợp Multi-Head Latent Attention giúp giảm 90% chi phí tính toán GPU.';
+      } else if (type === 'lora') {
+        titleEl.value = 'Kỹ Thuật Tinh Chỉnh LoRA & QLoRA';
+        catEl.value = 'Trí Tuệ Nhân Tạo';
+        contentEl.value = 'Low-Rank Adaptation đóng băng trọng số gốc và đưa vào các ma trận phân rã hạng thấp A và B giúp giảm mạnh bộ nhớ VRAM khi fine-tuning LLM.';
+      } else if (type === 'flash') {
+        titleEl.value = 'FlashAttention-3 Tối Ưu GPU H100 FP8';
+        catEl.value = 'Khoa Học Máy Tính';
+        contentEl.value = 'Thuật toán chia khối IO-Aware Attention giảm truy cập HBM và tận dụng tối đa Tensor Core FP8 bất đối xứng trên kiến trúc NVIDIA Hopper.';
+      } else if (type === 'quant') {
+        titleEl.value = 'Nén Lượng Tử Hóa KV-Cache FP8 / INT4';
+        catEl.value = 'Cơ Sở Dữ Liệu Vector';
+        contentEl.value = 'Lượng tử hóa bộ đệm Key-Value Cache từ FP16 xuống FP8/INT4 cho phép mở rộng ngữ cảnh hội thoại lên 128k token mà không bị tràn bộ nhớ VRAM GPU.';
+      }
+    }
+
+    // Trigger Search & 3D Simulation
+    async function handle3DSearch(e) {
+      if (e) e.preventDefault();
+      const query = document.getElementById('search3DInput').value.trim();
+      if (!query) return;
+
+      const btn = document.getElementById('search3DBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Đang định tuyến...</span>`;
+      lucide.createIcons();
+
+      try {
+        const response = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: query, top_k: 5, ef_search: 50, compare_gt: true })
+        });
+        const data = await response.json();
+        lastSearchResults = data;
+        if (graphDirty3D) {
+          await load3DGraphData(true);
+          graphDirty3D = false;
+        }
+        setup3DSearchData(data);
+      } catch (err) {
+        alert('Lỗi 3D search: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="play" class="w-3.5 h-3.5"></i><span>Mô Phỏng 3D</span>`;
+        lucide.createIcons();
+      }
+    }
+
+    // Trigger Insertion & 3D Simulation
+    async function handle3DInsert(e) {
+      if (e) e.preventDefault();
+      const title = document.getElementById('insert3DTitle').value.trim();
+      const category = document.getElementById('insert3DCategory').value.trim();
+      const content = document.getElementById('insert3DContent').value.trim();
+
+      if (!title || !content) {
+        alert('Vui lòng nhập đầy đủ tiêu đề và nội dung để sinh vector!');
+        return;
+      }
+
+      const btn = document.getElementById('insert3DBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Đang sinh vector & chèn HNSW...</span>`;
+      lucide.createIcons();
+
+      try {
+        const res = await fetch('/api/visualize-insertion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: title,
+            category: category,
+            content: content,
+            tags: ['Dynamic Insertion'],
+            summary: content.slice(0, 160)
+          })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Lỗi khi chèn tài liệu');
+        }
+
+        lastInsertionResults = data;
+        setup3DInsertionData(data);
+        graphDirty3D = true;
+        
+        // Refresh stats badges
+        loadStats();
+      } catch (err) {
+        alert('Lỗi chèn dữ liệu: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="plus-circle" class="w-3.5 h-3.5"></i><span>Chèn & Mô Phỏng 3D</span>`;
+        lucide.createIcons();
+      }
+    }
+
+    // Setup 3D data and start playback for Search
+    function setup3DSearchData(data) {
+      // Tìm kiếm ở tab khác (kể cả lần tìm mặc định khi mở trang) có thể chạy trước khi khung 3D được khởi tạo
+      if (!data.query_3d || !scene3D) return;
+
+      const q3d = data.query_3d;
+      currentAnimationSteps = q3d.animation_steps || [];
+      currentStepIdx = 0;
+
+      // 1. Create or reposition Query 3D Marker (Glowing Golden Star/Octahedron)
+      if (query3DMesh) scene3D.remove(query3DMesh);
+      const topY = (graphData3D?.max_level || 1) * 75.0 + 12.0;
+
+      const qGeom = new THREE.OctahedronGeometry(4.5);
+      const qMat = new THREE.MeshStandardMaterial({
+        color: 0xf59e0b,
+        emissive: 0xf59e0b,
+        emissiveIntensity: 0.9,
+        wireframe: false
+      });
+      query3DMesh = new THREE.Mesh(qGeom, qMat);
+      query3DMesh.position.set(q3d.x, topY, q3d.z);
+      scene3D.add(query3DMesh);
+
+      // 2. Render Log in Right Panel
+      render3DLogPanel(currentAnimationSteps);
+
+      // 3. Reset all nodes to base colors
+      reset3DNodeColors();
+
+      // 4. Start automatic animation playback
+      stepReset();
+      stepPlayPause();
+    }
+
+    // Setup 3D data and start playback for Insertion
+    function setup3DInsertionData(data) {
+      if (!data.node_3d || !data.animation_steps) return;
+      const node = data.node_3d;
+
+      // 1. Remove previous query marker if any
+      if (query3DMesh) {
+        scene3D.remove(query3DMesh);
+        query3DMesh = null;
+      }
+
+      // 2. Spawn node mesh & identity pillar in 3D scene
+      spawnNewNodeIn3D(node);
+
+      // 3. Set animation steps
+      currentAnimationSteps = data.animation_steps || [];
+      currentStepIdx = 0;
+
+      // 4. Render Log in Right Panel
+      render3DLogPanel(currentAnimationSteps);
+
+      // 5. Focus camera smoothly towards new node
+      if (controls3D) {
+        controls3D.target.set(node.x, (node.level * 75.0) / 2, node.z);
+      }
+
+      // 6. Reset colors and auto play
+      stepReset();
+      stepPlayPause();
+    }
+
+    // Dynamically spawn new node in Three.js scene
+    function spawnNewNodeIn3D(nodeData) {
+      if (!scene3D) return;
+      
+      // If mesh already exists, return
+      if (nodeMeshes.some(m => m.userData.docId === nodeData.id)) return;
+
+      if (!graphData3D) {
+        graphData3D = { nodes: [], max_level: 0, layers: [] };
+      }
+      if (!graphData3D.nodes.some(n => n.id === nodeData.id)) {
+        graphData3D.nodes.push(nodeData);
+      }
+
+      // If level > current max_level, dynamically expand scene layers
+      if (nodeData.level > (graphData3D.max_level || 0)) {
+        graphData3D.max_level = nodeData.level;
+        const yPos = nodeData.level * 75.0;
+        const theme = LAYER_THEMES[nodeData.level % LAYER_THEMES.length];
+        
+        const planeGeom = new THREE.PlaneGeometry(210, 210);
+        const planeMat = new THREE.MeshBasicMaterial({
+          color: theme.colorHex,
+          transparent: true,
+          opacity: 0.05,
+          side: THREE.DoubleSide
+        });
+        const plane = new THREE.Mesh(planeGeom, planeMat);
+        plane.rotation.x = Math.PI / 2;
+        plane.position.y = yPos;
+        plane.userData = { level: nodeData.level };
+        scene3D.add(plane);
+        layerPlanes.push(plane);
+
+        const grid = new THREE.GridHelper(210, 14, theme.colorHex, 0x334155);
+        grid.position.y = yPos + 0.1;
+        grid.userData = { level: nodeData.level };
+        scene3D.add(grid);
+        layerPlanes.push(grid);
+      }
+
+      // Vertical Identity Pillar
+      if (nodeData.level > 0) {
+        const pBot = new THREE.Vector3(nodeData.x, 0, nodeData.z);
+        const pTop = new THREE.Vector3(nodeData.x, nodeData.level * 75.0, nodeData.z);
+        const pGeom = new THREE.BufferGeometry().setFromPoints([pBot, pTop]);
+        const pMat = new THREE.LineDashedMaterial({
+          color: 0x64748b,
+          dashSize: 3,
+          gapSize: 3,
+          transparent: true,
+          opacity: 0.75
+        });
+        const pLine = new THREE.Line(pGeom, pMat);
+        pLine.computeLineDistances();
+        pLine.userData = { isDynamicPillar: true };
+        scene3D.add(pLine);
+        pillarLines.push(pLine);
+      }
+
+      // Sphere meshes on layers 0..nodeData.level
+      const sphereGeom = new THREE.SphereGeometry(1, 16, 16);
+      for (let l = 0; l <= nodeData.level; l++) {
+        const yPos = l * 75.0;
+        const theme = LAYER_THEMES[l % LAYER_THEMES.length];
+        const radius = (l === nodeData.level) ? 3.6 : (l === 0 ? 2.2 : 2.8);
+
+        const mat = new THREE.MeshStandardMaterial({
+          color: theme.colorHex,
+          roughness: 0.3,
+          metalness: 0.2,
+          emissive: 0x10b981,
+          emissiveIntensity: 0.85
+        });
+
+        const mesh = new THREE.Mesh(sphereGeom, mat);
+        mesh.scale.set(radius, radius, radius);
+        mesh.position.set(nodeData.x, yPos, nodeData.z);
+        mesh.userData = {
+          docId: nodeData.id,
+          level: l,
+          maxLevel: nodeData.level,
+          title: nodeData.title,
+          category: nodeData.category,
+          summary: nodeData.summary,
+          origColor: theme.colorHex,
+          origScale: radius,
+          x: nodeData.x,
+          z: nodeData.z,
+          isNew: true
+        };
+        scene3D.add(mesh);
+        nodeMeshes.push(mesh);
+      }
+
+      // Update badge
+      const totalBadge = document.getElementById('totalNodes3DBadge');
+      if (totalBadge) totalBadge.innerText = `${nodeMeshes.length} nodes`;
+    }
+
+    function render3DLogPanel(steps) {
+      const container = document.getElementById('panel3D-log');
+      if (!steps || steps.length === 0) {
+        container.innerHTML = `<div class="text-center py-6 text-slate-500">Chưa có dữ liệu bước nhảy.</div>`;
+        return;
+      }
+
+      let html = '';
+      steps.forEach((s, idx) => {
+        let tagClass = 'bg-slate-700 text-slate-200';
+        let tagName = 'STEP';
+        // Search tags
+        if (s.type === 'entry') { tagClass = 'bg-amber-500/20 text-amber-300 border border-amber-500/30'; tagName = 'ENTRY'; }
+        if (s.type === 'jump') { tagClass = 'bg-blue-500/20 text-blue-300 border border-blue-500/30'; tagName = 'JUMP'; }
+        if (s.type === 'drop') { tagClass = 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'; tagName = 'DROP'; }
+        if (s.type === 'beam_visit') { tagClass = s.accepted ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'; tagName = 'BEAM'; }
+        if (s.type === 'winners') { tagClass = 'bg-rose-500/20 text-rose-300 border border-rose-500/30'; tagName = 'TOP-K'; }
+        if (s.type === 'beam_truncated') { tagClass = 'bg-slate-700 text-slate-200'; tagName = 'GHI CHÚ'; }
+
+        // Insertion tags
+        if (s.type === 'insert_spawn') { tagClass = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'; tagName = 'GÁN TẦNG'; }
+        if (s.type === 'insert_ep') { tagClass = 'bg-amber-500/20 text-amber-300 border border-amber-500/30'; tagName = 'ENTRY POINT'; }
+        if (s.type === 'insert_jump') { tagClass = 'bg-sky-500/20 text-sky-300 border border-sky-500/30'; tagName = 'GREEDY'; }
+        if (s.type === 'insert_drop') { tagClass = 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'; tagName = 'HẠ TẦNG'; }
+        if (s.type === 'insert_beam') { tagClass = 'bg-amber-500/20 text-amber-300 border border-amber-500/30'; tagName = 'TẬP W'; }
+        if (s.type === 'insert_heuristic') { tagClass = 'bg-purple-500/20 text-purple-300 border border-purple-500/30'; tagName = 'EMPTY-LUNE'; }
+        if (s.type === 'insert_connect') { tagClass = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'; tagName = 'NỐI CẠNH'; }
+        if (s.type === 'insert_prune') { tagClass = 'bg-rose-500/20 text-rose-300 border border-rose-500/30'; tagName = 'TỈA CẠNH'; }
+        if (s.type === 'insert_finish') { tagClass = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'; tagName = 'HOÀN TẤT'; }
+
+        html += `
+          <div id="logStep-${idx}" onclick="jumpToStep(${idx})" class="p-2 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-slate-700 cursor-pointer transition text-[11px] space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="px-1.5 py-0.5 rounded font-mono font-bold text-[9px] ${tagClass}">${tagName}</span>
+              <span class="text-[10px] font-mono text-slate-500">#${s.step}</span>
+            </div>
+            <p class="text-slate-300 leading-tight">${s.desc}</p>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+      switch3DPanelTab('log');
+    }
+
+    function applyStep3D(idx) {
+      if (!currentAnimationSteps || idx >= currentAnimationSteps.length) return;
+      const step = currentAnimationSteps[idx];
+
+      // Update indicator
+      document.getElementById('stepProgressIndicator').innerText = `Bước ${idx + 1} / ${currentAnimationSteps.length}`;
+      document.getElementById('stepStatusText').innerText = step.desc;
+
+      // Highlight log item in right panel
+      document.querySelectorAll('#panel3D-log > div').forEach(el => el.classList.remove('border-brand-500', 'bg-brand-950/40'));
+      const activeLogItem = document.getElementById(`logStep-${idx}`);
+      if (activeLogItem) {
+        activeLogItem.classList.add('border-brand-500', 'bg-brand-950/40');
+        activeLogItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      // ==========================================
+      // 3D Scene updates for Search
+      // ==========================================
+      if (step.type === 'entry') {
+        const mesh = nodeMeshes.find(m => m.userData.docId === step.node_id && m.userData.level === step.layer);
+        if (mesh) {
+          mesh.material.emissive.setHex(0xf59e0b);
+          mesh.material.emissiveIntensity = 1.0;
+          createPulseHalo(mesh.position, 0xf59e0b);
+        }
+      }
+      else if (step.type === 'jump') {
+        const fromMesh = nodeMeshes.find(m => m.userData.docId === step.from_node && m.userData.level === step.layer);
+        const toMesh = nodeMeshes.find(m => m.userData.docId === step.to_node && m.userData.level === step.layer);
+        if (fromMesh && toMesh) {
+          drawBeamLine(fromMesh.position, toMesh.position, 0x38bdf8);
+          toMesh.material.emissive.setHex(0x38bdf8);
+          toMesh.material.emissiveIntensity = 0.9;
+        }
+      }
+      else if (step.type === 'drop') {
+        const fromMesh = nodeMeshes.find(m => m.userData.docId === step.node_id && m.userData.level === step.from_layer);
+        const toMesh = nodeMeshes.find(m => m.userData.docId === step.node_id && m.userData.level === step.to_layer);
+        if (fromMesh && toMesh) {
+          drawBeamLine(fromMesh.position, toMesh.position, 0x818cf8);
+          toMesh.material.emissive.setHex(0x818cf8);
+          toMesh.material.emissiveIntensity = 0.9;
+        }
+      }
+      else if (step.type === 'beam_visit') {
+        const mesh = nodeMeshes.find(m => m.userData.docId === step.node_id && m.userData.level === 0);
+        if (mesh) {
+          const color = step.accepted ? 0x10b981 : 0x64748b;
+          mesh.material.emissive.setHex(color);
+          mesh.material.emissiveIntensity = step.accepted ? 0.8 : 0.2;
+          if (step.from_node !== undefined) {
+            const fromMesh = nodeMeshes.find(m => m.userData.docId === step.from_node && m.userData.level === 0);
+            if (fromMesh) drawBeamLine(fromMesh.position, mesh.position, color);
+          }
+        }
+      }
+      else if (step.type === 'winners') {
+        for (const wId of (step.winner_ids || [])) {
+          const mesh = nodeMeshes.find(m => m.userData.docId === wId && m.userData.level === 0);
+          if (mesh) {
+            mesh.material.emissive.setHex(0xf43f5e);
+            mesh.material.emissiveIntensity = 1.0;
+            createPulseHalo(mesh.position, 0xf43f5e);
+          }
+        }
+      }
+
+      // ==========================================
+      // 3D Scene updates for Insertion
+      // ==========================================
+      else if (step.type === 'insert_spawn') {
+        const mesh = nodeMeshes.find(m => m.userData.docId === step.node_id && m.userData.level === step.layer);
+        if (mesh) {
+          mesh.material.emissive.setHex(0x10b981);
+          mesh.material.emissiveIntensity = 1.0;
+          createPulseHalo(mesh.position, 0x10b981);
+        }
+      }
+      else if (step.type === 'insert_ep') {
+        const mesh = nodeMeshes.find(m => m.userData.docId === step.node_id && m.userData.level === step.layer);
+        if (mesh) {
+          mesh.material.emissive.setHex(0xf59e0b);
+          mesh.material.emissiveIntensity = 1.0;
+          createPulseHalo(mesh.position, 0xf59e0b);
+        }
+      }
+      else if (step.type === 'insert_jump') {
+        const fromMesh = nodeMeshes.find(m => m.userData.docId === step.from_node && m.userData.level === step.layer);
+        const toMesh = nodeMeshes.find(m => m.userData.docId === step.to_node && m.userData.level === step.layer);
+        if (fromMesh && toMesh) {
+          drawBeamLine(fromMesh.position, toMesh.position, 0x38bdf8);
+          toMesh.material.emissive.setHex(0x38bdf8);
+          toMesh.material.emissiveIntensity = 0.9;
+        }
+      }
+      else if (step.type === 'insert_drop') {
+        const fromMesh = nodeMeshes.find(m => m.userData.docId === step.node_id && m.userData.level === step.from_layer);
+        const toMesh = nodeMeshes.find(m => m.userData.docId === step.node_id && m.userData.level === step.to_layer);
+        if (fromMesh && toMesh) {
+          drawBeamLine(fromMesh.position, toMesh.position, 0x818cf8);
+          toMesh.material.emissive.setHex(0x818cf8);
+          toMesh.material.emissiveIntensity = 0.9;
+        }
+      }
+      else if (step.type === 'insert_beam') {
+        for (const cid of (step.candidates || [])) {
+          const cMesh = nodeMeshes.find(m => m.userData.docId === cid && m.userData.level === step.layer);
+          if (cMesh) {
+            cMesh.material.emissive.setHex(0xf59e0b);
+            cMesh.material.emissiveIntensity = 0.7;
+          }
+        }
+      }
+      else if (step.type === 'insert_heuristic') {
+        for (const sid of (step.selected || [])) {
+          const sMesh = nodeMeshes.find(m => m.userData.docId === sid && m.userData.level === step.layer);
+          if (sMesh) {
+            sMesh.material.emissive.setHex(0x10b981);
+            sMesh.material.emissiveIntensity = 0.95;
+          }
+        }
+      }
+      else if (step.type === 'insert_connect') {
+        const baseMesh = nodeMeshes.find(m => m.userData.docId === step.node_id && m.userData.level === step.layer);
+        if (baseMesh && step.neighbors) {
+          baseMesh.material.emissive.setHex(0x10b981);
+          baseMesh.material.emissiveIntensity = 1.0;
+          for (const nId of step.neighbors) {
+            const nMesh = nodeMeshes.find(m => m.userData.docId === nId && m.userData.level === step.layer);
+            if (nMesh) {
+              nMesh.material.emissive.setHex(0x10b981);
+              nMesh.material.emissiveIntensity = 0.85;
+              drawConnectedEdge(baseMesh.position, nMesh.position, 0x10b981, step.layer, idx);
+            }
+          }
+        }
+      }
+      else if (step.type === 'insert_prune') {
+        const nMesh = nodeMeshes.find(m => m.userData.docId === step.neighbor_id && m.userData.level === step.layer);
+        if (nMesh && step.removed_nodes) {
+          for (const remId of step.removed_nodes) {
+            const remMesh = nodeMeshes.find(m => m.userData.docId === remId && m.userData.level === step.layer);
+            if (remMesh) {
+              drawBeamLine(nMesh.position, remMesh.position, 0xef4444);
+            }
+          }
+        }
+      }
+      else if (step.type === 'insert_finish') {
+        const mesh = nodeMeshes.find(m => m.userData.docId === step.node_id && m.userData.level === 0);
+        if (mesh) {
+          createPulseHalo(mesh.position, 0x10b981);
+        }
+      }
+    }
+
+    function drawBeamLine(p1, p2, colorHex) {
+      if (activeBeamLine) scene3D.remove(activeBeamLine);
+      const pts = [p1.clone(), p2.clone()];
+      const geom = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({ color: colorHex, linewidth: 3 });
+      activeBeamLine = new THREE.Line(geom, mat);
+      scene3D.add(activeBeamLine);
+    }
+
+    function drawConnectedEdge(p1, p2, colorHex, layer, stepIdx) {
+      const pts = [p1.clone(), p2.clone()];
+      const geom = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({ color: colorHex, linewidth: 2.5, transparent: true, opacity: 0.95 });
+      const line = new THREE.Line(geom, mat);
+      line.userData = { level: layer, stepIdx: stepIdx, isDynamicEdge: true };
+      scene3D.add(line);
+      dynamicEdgeLines.push(line);
+    }
+
+    function createPulseHalo(pos, colorHex) {
+      const ringGeom = new THREE.RingGeometry(3.5, 4.8, 32);
+      const ringMat = new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+      const ring = new THREE.Mesh(ringGeom, ringMat);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.copy(pos);
+      ring.position.y += 0.4;
+      scene3D.add(ring);
+      highlightHaloMeshes.push(ring);
+    }
+
+    function reset3DNodeColors() {
+      for (const m of nodeMeshes) {
+        m.material.emissive.setHex(m.userData.origColor);
+        m.material.emissiveIntensity = m.userData.level === (graphData3D?.max_level || 0) ? 0.35 : 0.15;
+      }
+      for (const h of highlightHaloMeshes) scene3D.remove(h);
+      highlightHaloMeshes = [];
+      // Cạnh vẽ ở bước "nối cạnh" sẽ được vẽ lại khi phát lại các bước, tránh chồng nhiều lớp
+      for (const d of dynamicEdgeLines) scene3D.remove(d);
+      dynamicEdgeLines = [];
+      if (activeBeamLine) scene3D.remove(activeBeamLine);
+      activeBeamLine = null;
+    }
+
+    // Step Controls
+    function stepPlayPause() {
+      if (isPlaying) {
+        clearInterval(animationInterval);
+        isPlaying = false;
+        document.getElementById('playIcon').setAttribute('data-lucide', 'play');
+      } else {
+        if (currentAnimationSteps.length === 0) return;
+        if (currentStepIdx >= currentAnimationSteps.length - 1) {
+          stepReset();
+        }
+        isPlaying = true;
+        document.getElementById('playIcon').setAttribute('data-lucide', 'pause');
+        animationInterval = setInterval(() => {
+          if (currentStepIdx < currentAnimationSteps.length - 1) {
+            currentStepIdx++;
+            applyStep3D(currentStepIdx);
+          } else {
+            stepPlayPause(); // Pause at end
+          }
+        }, 950);
+      }
+      lucide.createIcons();
+    }
+
+    function stepNext() {
+      if (isPlaying) stepPlayPause();
+      if (currentStepIdx < currentAnimationSteps.length - 1) {
+        currentStepIdx++;
+        applyStep3D(currentStepIdx);
+      }
+    }
+
+    function stepPrev() {
+      if (isPlaying) stepPlayPause();
+      if (currentStepIdx > 0) {
+        currentStepIdx--;
+        reset3DNodeColors();
+        for (let i = 0; i <= currentStepIdx; i++) {
+          applyStep3D(i);
+        }
+      }
+    }
+
+    function stepReset() {
+      if (isPlaying) stepPlayPause();
+      currentStepIdx = 0;
+      reset3DNodeColors();
+      if (currentAnimationSteps.length > 0) {
+        applyStep3D(0);
+      }
+    }
+
+    function jumpToStep(idx) {
+      if (isPlaying) stepPlayPause();
+      currentStepIdx = idx;
+      reset3DNodeColors();
+      for (let i = 0; i <= idx; i++) {
+        applyStep3D(i);
+      }
+    }
+
+    // Camera viewpoints
+    function setCameraIsometric() {
+      if (!camera3D || !controls3D) return;
+      camera3D.position.set(220, 200, 260);
+      controls3D.target.set(0, 45, 0);
+    }
+
+    function setCameraTopDown() {
+      if (!camera3D || !controls3D) return;
+      camera3D.position.set(0, 360, 10);
+      controls3D.target.set(0, 45, 0);
+    }
+
+    function setCameraLayer0Focus() {
+      if (!camera3D || !controls3D) return;
+      camera3D.position.set(130, 40, 150);
+      controls3D.target.set(0, 0, 0);
+    }
+
+    function reset3DCamera() {
+      setCameraIsometric();
+    }
+
+    // Layer Visibility Filter Toggles
+    function toggleLayerLevel(lvl, isVisible) {
+      for (const m of nodeMeshes) {
+        if (m.userData.level === lvl) m.visible = isVisible;
+      }
+      for (const l of edgeLines) {
+        if (l.userData.level === lvl) l.visible = isVisible;
+      }
+    }
+
+    function togglePillarsVisibility(isVisible) {
+      for (const p of pillarLines) p.visible = isVisible;
+    }
+
+    function toggleEdgesVisibility(isVisible) {
+      for (const e of edgeLines) e.visible = isVisible;
+    }
+
+    // Inspect Node
+    function inspect3DNode(nodeData) {
+      selectedInspectNodeId = nodeData.docId;
+      document.getElementById('inspectId').innerText = `Node #${nodeData.docId}`;
+      document.getElementById('inspectLevel').innerText = `Tầng ${nodeData.level} (Max L${nodeData.maxLevel})`;
+      document.getElementById('inspectTitle').innerText = nodeData.title;
+      document.getElementById('inspectCategory').innerText = `Danh mục: ${nodeData.category}`;
+      document.getElementById('inspectSummary').innerText = nodeData.summary || 'Không có bản tóm tắt.';
+      document.getElementById('inspectCoords').innerText = `Tọa độ 3D: (X: ${nodeData.x}, Y: ${nodeData.level * 75}, Z: ${nodeData.z})`;
+
+      document.getElementById('nodeInspectorEmpty').classList.add('hidden');
+      document.getElementById('nodeInspectorContent').classList.remove('hidden');
+      switch3DPanelTab('inspector');
+    }
+
+    function switch3DPanelTab(tabName) {
+      if (tabName === 'log') {
+        document.getElementById('panel3D-log').classList.remove('hidden');
+        document.getElementById('panel3D-inspector').classList.add('hidden');
+        document.getElementById('btn3dTab-log').classList.add('border-brand-500', 'text-brand-400');
+        document.getElementById('btn3dTab-log').classList.remove('border-transparent', 'text-slate-400');
+        document.getElementById('btn3dTab-inspector').classList.remove('border-brand-500', 'text-brand-400');
+        document.getElementById('btn3dTab-inspector').classList.add('border-transparent', 'text-slate-400');
+      } else {
+        document.getElementById('panel3D-inspector').classList.remove('hidden');
+        document.getElementById('panel3D-log').classList.add('hidden');
+        document.getElementById('btn3dTab-inspector').classList.add('border-brand-500', 'text-brand-400');
+        document.getElementById('btn3dTab-inspector').classList.remove('border-transparent', 'text-slate-400');
+        document.getElementById('btn3dTab-log').classList.remove('border-brand-500', 'text-brand-400');
+        document.getElementById('btn3dTab-log').classList.add('border-transparent', 'text-slate-400');
+      }
+    }
+
+    function openDocModalFrom3D() {
+      if (selectedInspectNodeId !== null) {
+        openDocModal(selectedInspectNodeId);
+      }
+    }
+
+    // =========================================================================
+    // 2D ROUTING VISUALIZER
+    // =========================================================================
+    function renderRoutingVisualizer(data) {
+      if (!data || !data.trace) return;
+      document.getElementById('visQueryText').innerText = `Query: "${data.query}"`;
+      const container = document.getElementById('routingLayersView');
+      const trace = data.trace;
+
+      let html = `
+        <div class="bg-slate-50 dark:bg-slate-950/70 p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-700 dark:text-slate-300 flex flex-wrap gap-4 justify-between items-center mb-6">
+          <div><span class="text-slate-400">Điểm vào toàn cục:</span> <strong class="text-amber-600 dark:text-amber-400">#${trace.global_enter_point}</strong> (Layer ${trace.max_level})</div>
+          <div><span class="text-slate-400">Độ rộng chùm ef:</span> <strong class="text-brand-600 dark:text-brand-400">${trace.ef_used}</strong></div>
+          <div><span class="text-slate-400">Nút đánh giá tại Layer 0:</span> <strong class="text-sky-600 dark:text-cyan-400">${trace.layer0_visited_count} nodes</strong></div>
+        </div>
+      `;
+
+      (trace.layers || []).forEach(l => {
+        const isLayer0 = l.level === 0;
+        const badgeColor = isLayer0 ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/40' : 'bg-brand-50 text-brand-700 border-brand-200 dark:bg-brand-500/20 dark:text-brand-300 dark:border-brand-500/40';
+
+        html += `
+          <div class="border border-slate-200 dark:border-slate-800 rounded-xl p-5 bg-white dark:bg-slate-950/40 shadow-sm relative">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800/80">
+              <div class="flex items-center space-x-2">
+                <span class="px-2.5 py-1 rounded-md text-xs font-mono font-bold border ${badgeColor}">Layer ${l.level}</span>
+                <span class="text-xs font-semibold text-slate-800 dark:text-slate-200">${isLayer0 ? 'Tìm kiếm Chùm Tia Tầng Đáy (Local Beam Search)' : 'Định tuyến Tham lam Nhảy Xa (Greedy 1-NN Routing)'}</span>
+              </div>
+              <div class="text-xs font-mono text-slate-500">
+                Entry Node: #${l.entry_point} (Dist: ${l.entry_dist})
+              </div>
+            </div>
+
+            <div class="mt-3">
+              ${isLayer0 ? `
+                <div class="text-xs text-slate-500 mb-2 font-mono">Duyệt chùm tia ef=${trace.ef_used}:</div>
+                <div class="max-h-60 overflow-y-auto custom-scrollbar">
+                  <table class="w-full text-left text-xs font-mono">
+                    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 sticky top-0">
+                      <tr>
+                        <th class="p-2">Hành động</th>
+                        <th class="p-2">Từ Nút</th>
+                        <th class="p-2">Đến Nút</th>
+                        <th class="p-2">Khoảng cách</th>
+                        <th class="p-2">Trạng thái</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                      ${(l.hops || []).map(h => `
+                        <tr>
+                          <td class="p-2 text-slate-400">${h.action}</td>
+                          <td class="p-2">${h.from_node !== undefined ? '#' + h.from_node : '-'}</td>
+                          <td class="p-2 font-bold text-slate-900 dark:text-white">#${h.node_id}</td>
+                          <td class="p-2 text-sky-600 dark:text-cyan-400 font-semibold">${h.distance}</td>
+                          <td class="p-2">${h.accepted ? '<span class="text-emerald-600 dark:text-emerald-400 font-semibold">✓ Chấp nhận</span>' : '<span class="text-rose-500 dark:text-rose-400">✕ Loại bỏ</span>'}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              ` : `
+                <div class="flex items-center space-x-3 text-xs font-mono">
+                  <span class="text-slate-500">Bước nhảy tham lam:</span>
+                  <span class="text-slate-900 dark:text-white font-bold">Node #${l.entry_point}</span>
+                  <i data-lucide="arrow-right" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
+                  <span class="text-emerald-600 dark:text-emerald-400 font-bold">Node #${l.best_node} (Dist: ${l.best_dist})</span>
+                </div>
+              `}
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+      lucide.createIcons();
+    }
+
+    // Switch between Search and Insertion views in 2D Visualizer Tab
+    function switch2DVisualizerMode(mode) {
+      visualizerMode = mode;
+      const btnSearch = document.getElementById('btn2DModeSearch');
+      const btnInsert = document.getElementById('btn2DModeInsert');
+      const viewSearch = document.getElementById('routingLayersView');
+      const viewInsert = document.getElementById('insertionLayersView');
+
+      if (mode === 'search') {
+        btnSearch.classList.add('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-brand-600', 'dark:text-brand-400');
+        btnSearch.classList.remove('text-slate-500', 'dark:text-slate-400');
+        btnInsert.classList.remove('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-brand-600', 'dark:text-brand-400');
+        btnInsert.classList.add('text-slate-500', 'dark:text-slate-400');
+        viewSearch.classList.remove('hidden');
+        viewInsert.classList.add('hidden');
+        if (lastSearchResults) renderRoutingVisualizer(lastSearchResults);
+      } else {
+        btnInsert.classList.add('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-brand-600', 'dark:text-brand-400');
+        btnInsert.classList.remove('text-slate-500', 'dark:text-slate-400');
+        btnSearch.classList.remove('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-brand-600', 'dark:text-brand-400');
+        btnSearch.classList.add('text-slate-500', 'dark:text-slate-400');
+        viewInsert.classList.remove('hidden');
+        viewSearch.classList.add('hidden');
+        if (lastInsertionResults) renderInsertionVisualizer(lastInsertionResults);
+      }
+      lucide.createIcons();
+    }
+
+    // 2D Detailed Insertion & Empty-Lune RNG Visualizer
+    function renderInsertionVisualizer(data) {
+      if (!data || !data.trace) return;
+      const doc = data.document || {};
+      const trace = data.trace;
+      const container = document.getElementById('insertionLayersView');
+      if (!container) return;
+
+      document.getElementById('visQueryText').innerText = `Chèn Node: #${doc.id || trace.node_id} - "${(doc.title || 'Tài liệu mới').slice(0, 32)}..."`;
+
+      let html = `
+        <!-- Card 1: Exponential Layer Assignment Formula -->
+        <div class="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-brand-500/10 p-5 rounded-2xl border border-emerald-500/20 text-xs text-slate-700 dark:text-slate-300 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-emerald-500/20">
+            <div class="flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span class="font-bold text-sm text-slate-900 dark:text-white">Phân Phối Xác Suất Gán Tầng (Algorithm 1 Layer Assignment)</span>
+            </div>
+            <span class="px-2.5 py-1 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 font-mono font-bold">
+              Tầng Cao Nhất Được Gán: Layer ${trace.assigned_level}
+            </span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 font-mono text-[11px]">
+            <div class="bg-white dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+              <div class="text-slate-400">Biến ngẫu nhiên u:</div>
+              <div class="text-base font-bold text-brand-600 dark:text-brand-400 mt-0.5">${trace.random_u}</div>
+              <div class="text-[10px] text-slate-500">Phân phối đều U(0, 1)</div>
+            </div>
+            <div class="bg-white dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+              <div class="text-slate-400">Hệ số suy giảm mL:</div>
+              <div class="text-base font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">${trace.mL}</div>
+              <div class="text-[10px] text-slate-500">mL = 1 / ln(M)</div>
+            </div>
+            <div class="bg-white dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+              <div class="text-slate-400">Công thức phân tầng:</div>
+              <div class="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-1">⌊-ln(u) · mL⌋</div>
+              <div class="text-[10px] text-slate-500">Suy giảm hàm mũ (Skip-list)</div>
+            </div>
+            <div class="bg-white dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+              <div class="text-slate-400">Bậc tối đa M / M0:</div>
+              <div class="text-base font-bold text-amber-600 dark:text-amber-400 mt-0.5">${trace.M} / ${trace.M0}</div>
+              <div class="text-[10px] text-slate-500">efConstruction = ${trace.ef_construction}</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Group steps by layer
+      const rawSteps = trace.steps || [];
+      const layerGroups = {};
+      rawSteps.forEach(s => {
+        const l = s.layer !== undefined ? s.layer : (s.level !== undefined ? s.level : -1);
+        if (!layerGroups[l]) layerGroups[l] = [];
+        layerGroups[l].push(s);
+      });
+
+      const sortedLayers = Object.keys(layerGroups).map(Number).sort((a, b) => b - a);
+
+      sortedLayers.forEach(l => {
+        if (l < 0) return;
+        const lSteps = layerGroups[l];
+        const isLayer0 = l === 0;
+        const badgeColor = isLayer0 ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/40' : 'bg-brand-50 text-brand-700 border-brand-200 dark:bg-brand-500/20 dark:text-brand-300 dark:border-brand-500/40';
+
+        const rngStep = lSteps.find(s => s.type === 'heuristic_rng');
+        const connectStep = lSteps.find(s => s.type === 'connect_edges');
+        const pruneStep = lSteps.find(s => s.type === 'prune_overflow');
+        const jumpStep = lSteps.find(s => s.type === 'greedy_jump');
+
+        html += `
+          <div class="border border-slate-200 dark:border-slate-800 rounded-xl p-5 bg-white dark:bg-slate-950/40 shadow-sm relative space-y-3">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800/80">
+              <div class="flex items-center space-x-2">
+                <span class="px-2.5 py-1 rounded-md text-xs font-mono font-bold border ${badgeColor}">Layer ${l}</span>
+                <span class="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  ${l > trace.assigned_level ? 'Định Tuyến Tham Lam Xuống Tầng Của Node (Greedy 1-NN Descent)' : 'Kết Nối Đa Dạng Hướng & Cắt Tỉa Bậc (Heuristic RNG Indexing)'}
+                </span>
+              </div>
+              <div class="text-xs font-mono text-slate-500">
+                ${connectStep ? `Cạnh đã nối: ${connectStep.neighbors.length} láng giềng` : (jumpStep ? `Nhảy tham lam 1-NN` : '')}
+              </div>
+            </div>
+        `;
+
+        if (jumpStep) {
+          html += `
+            <div class="flex items-center space-x-3 text-xs font-mono bg-slate-50 dark:bg-slate-900/60 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+              <span class="text-slate-400">Bước nhảy tham lam thô:</span>
+              <span class="text-slate-900 dark:text-white font-bold">Node #${jumpStep.from_node}</span>
+              <i data-lucide="arrow-right" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
+              <span class="text-emerald-600 dark:text-emerald-400 font-bold">Node #${jumpStep.to_node} (Khoảng cách d = ${jumpStep.dist})</span>
+            </div>
+          `;
+        }
+
+        if (rngStep && rngStep.decisions && rngStep.decisions.length > 0) {
+          html += `
+            <div class="space-y-2 pt-1">
+              <div class="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <span>Bảng Quyết Định Heuristic Empty-Lune (Algorithm 4 RNG):</span>
+                <span class="text-[11px] font-mono text-brand-600 dark:text-brand-400">M_max = ${rngStep.M_curr}</span>
+              </div>
+              <div class="max-h-60 overflow-y-auto custom-scrollbar border border-slate-200 dark:border-slate-800 rounded-lg">
+                <table class="w-full text-left text-xs font-mono">
+                  <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 sticky top-0">
+                    <tr>
+                      <th class="p-2">Ứng viên e</th>
+                      <th class="p-2">d(q, e)</th>
+                      <th class="p-2">Kiểm tra Vùng Trống (Empty-Lune)</th>
+                      <th class="p-2">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                    ${rngStep.decisions.map(d => `
+                      <tr>
+                        <td class="p-2 font-bold text-slate-900 dark:text-white">Node #${d.node_id}</td>
+                        <td class="p-2 text-sky-600 dark:text-cyan-400">${d.dist_to_base}</td>
+                        <td class="p-2 text-slate-500 text-[11px]">${d.reason}</td>
+                        <td class="p-2">
+                          ${d.status === 'accepted' ? '<span class="text-emerald-600 dark:text-emerald-400 font-bold">✓ Chấp nhận</span>' :
+                            (d.status === 'backfilled' ? '<span class="text-amber-500 font-semibold">⚡ Bổ sung</span>' :
+                            '<span class="text-rose-500 dark:text-rose-400">✕ Loại bỏ</span>')}
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+        }
+
+        if (connectStep) {
+          html += `
+            <div class="text-xs font-mono text-slate-600 dark:text-slate-400 flex items-center space-x-2 pt-1">
+              <span class="text-slate-400">Cạnh 2 chiều đã liên kết tại Layer ${l}:</span>
+              <span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 font-bold">
+                [${connectStep.neighbors.join(', ')}]
+              </span>
+            </div>
+          `;
+        }
+
+        if (pruneStep) {
+          html += `
+            <div class="text-xs font-mono text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 p-2.5 rounded-lg border border-rose-200 dark:border-rose-900/50">
+              ⚠️ <strong>Cắt tỉa bậc:</strong> Bậc láng giềng Node #${pruneStep.neighbor_id} vượt M_max. Heuristic đã cắt bỏ kết nối tới ${JSON.stringify(pruneStep.removed_nodes)}.
+            </div>
+          `;
+        }
+
+        html += `</div>`;
+      });
+
+      const epStep = rawSteps.find(s => s.type === 'update_entry_point');
+      if (epStep) {
+        html += `
+          <div class="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl p-4 text-xs font-mono text-amber-800 dark:text-amber-300 flex items-center space-x-3">
+            <i data-lucide="crown" class="w-5 h-5 text-amber-500 flex-shrink-0"></i>
+            <div>
+              <strong>CẬP NHẬT ENTRY POINT TOÀN CỤC:</strong> Node #${epStep.new_entry_point} tại Layer ${epStep.new_max_level} đã vượt qua độ sâu cũ (Layer ${epStep.old_max_level}) và được phong làm Điểm Vào Toàn Cục mới cho toàn bộ các lượt truy vấn tương lai!
+            </div>
+          </div>
+        `;
+      }
+
+      container.innerHTML = html;
+      lucide.createIcons();
+    }
+
+    // =========================================================================
+    // TOPOLOGY & STATS
+    // =========================================================================
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+        
+        document.getElementById('topoTotalNodes').innerText = data.total_nodes;
+        document.getElementById('topoDim').innerText = data.dimension;
+        document.getElementById('topoMaxLevel').innerText = 'Layer ' + data.max_level;
+        document.getElementById('topoEnterPoint').innerText = `Điểm vào: Node #${data.enter_point}`;
+        document.getElementById('topoMemory').innerText = data.memory_kb + ' KB';
+        document.getElementById('statDocs').innerText = `${data.total_nodes} Tài liệu`;
+        document.getElementById('deviceText').innerText = `${data.device} PyTorch`;
+
+        const layerList = document.getElementById('topoLayerList');
+        if (layerList) {
+          let html = '';
+          const maxNodes = Math.max(...data.nodes_per_level, 1);
+
+          data.nodes_per_level.forEach((count, level) => {
+            const pct = ((count / maxNodes) * 100).toFixed(0);
+            const deg = data.degree_per_level[level] || {};
+            html += `
+              <div class="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-mono space-y-1.5">
+                <div class="flex justify-between items-center">
+                  <span class="font-bold text-brand-700 dark:text-brand-300">Layer ${level}</span>
+                  <span class="text-slate-500 dark:text-slate-400">${count} nút (${deg.total_edges || 0} cạnh)</span>
+                </div>
+                <div class="w-full bg-slate-200 dark:bg-slate-900 rounded-full h-2 overflow-hidden">
+                  <div class="bg-gradient-to-r from-brand-500 to-indigo-500 h-2 rounded-full" style="width: ${pct}%"></div>
+                </div>
+                <div class="flex justify-between text-[11px] text-slate-400">
+                  <span>Bậc trung bình: ${deg.avg_degree || 0}</span>
+                  <span>Bậc Max: ${deg.max_degree || 0}</span>
+                </div>
+              </div>
+            `;
+          });
+          layerList.innerHTML = html;
+        }
+      } catch (err) {
+        console.error('Failed to load stats:', err);
+      }
+    }
+
+    async function handleReindex(e) {
+      e.preventDefault();
+      const M = parseInt(document.getElementById('tuneM').value);
+      const efConstruction = parseInt(document.getElementById('tuneEfConst').value);
+      const efSearch = parseInt(document.getElementById('tuneEfSearch').value);
+      const btn = document.getElementById('reindexBtn');
+
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang tái xây dựng chỉ mục...</span>`;
+      lucide.createIcons();
+
+      try {
+        const res = await fetch('/api/reindex', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ M, ef_construction: efConstruction, ef_search: efSearch })
+        });
+        await res.json();
+        alert('Tái xây dựng đồ thị HNSW thành công!');
+        loadStats();
+        load3DGraphData(true);
+      } catch (err) {
+        alert('Lỗi: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="refresh-cw" class="w-4 h-4"></i><span>Tái Xây Dựng Chỉ Mục (Rebuild HNSW Index)</span>`;
+        lucide.createIcons();
+      }
+    }
+
+    // =========================================================================
+    // BENCHMARK SUITE
+    // =========================================================================
+    let lastBenchmarkData = null;
+    async function runBenchmark() {
+      const btn = document.getElementById('runBenchmarkBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang đo đạc...</span>`;
+      lucide.createIcons();
+
+      try {
+        const res = await fetch('/api/benchmark', { method: 'POST' });
+        const data = await res.json();
+        lastBenchmarkData = data.benchmark_results;
+
+        const tbody = document.getElementById('benchmarkTableBody');
+        tbody.innerHTML = lastBenchmarkData.map(r => {
+          const speedup = (r.avg_gt_latency_ms / Math.max(0.01, r.avg_hnsw_latency_ms)).toFixed(1);
+          return `
+            <tr>
+              <td class="p-3 font-bold text-brand-600 dark:text-brand-400">ef = ${r.ef_search}</td>
+              <td class="p-3 text-emerald-600 dark:text-emerald-400 font-bold">${r.avg_recall_pct}%</td>
+              <td class="p-3">${r.avg_hnsw_latency_ms} ms</td>
+              <td class="p-3 text-slate-400">${r.avg_gt_latency_ms} ms</td>
+              <td class="p-3 text-sky-600 dark:text-cyan-400">${r.avg_hnsw_calcs} / ${r.total_nodes}</td>
+              <td class="p-3 text-amber-600 dark:text-amber-400 font-bold">${speedup}x</td>
+            </tr>
+          `;
+        }).join('');
+
+        renderBenchmarkChart(lastBenchmarkData);
+      } catch (err) {
+        alert('Lỗi Benchmark: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i><span>Chạy Thử Nghiệm Benchmark</span>`;
+        lucide.createIcons();
+      }
+    }
+
+    function renderBenchmarkChart(results) {
+      const chartElem = document.getElementById('benchmarkChart');
+      if (!chartElem) return;
+      const ctx = chartElem.getContext('2d');
+      if (benchmarkChartInstance) benchmarkChartInstance.destroy();
+
+      const isDark = document.documentElement.classList.contains('dark');
+      const textColor = isDark ? '#94a3b8' : '#475569';
+      const gridColor = isDark ? '#1e293b' : '#e2e8f0';
+
+      const labels = results.map(r => `ef=${r.ef_search}`);
+      const recalls = results.map(r => r.avg_recall_pct);
+      const latencies = results.map(r => r.avg_hnsw_latency_ms);
+
+      benchmarkChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Recall@5 (%)',
+              data: recalls,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              yAxisID: 'yRecall',
+              tension: 0.3,
+              fill: true
+            },
+            {
+              label: 'Độ trễ HNSW (ms)',
+              data: latencies,
+              borderColor: '#4f46e5',
+              backgroundColor: 'rgba(79, 70, 229, 0.1)',
+              yAxisID: 'yLatency',
+              tension: 0.3
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: textColor } }
+          },
+          scales: {
+            x: { ticks: { color: textColor }, grid: { color: gridColor } },
+            yRecall: {
+              type: 'linear',
+              position: 'left',
+              min: 50,
+              max: 105,
+              ticks: { color: '#10b981' },
+              grid: { color: gridColor },
+              title: { display: true, text: 'Recall (%)', color: '#10b981' }
+            },
+            yLatency: {
+              type: 'linear',
+              position: 'right',
+              ticks: { color: '#6366f1' },
+              grid: { drawOnChartArea: false },
+              title: { display: true, text: 'Latency (ms)', color: '#6366f1' }
+            }
+          }
+        }
+      });
+    }
+
+    // =========================================================================
+    // CORPUS & DOCUMENT STORE MANAGEMENT
+    // =========================================================================
+    let cachedCorpusDocs = [];
+
+    async function loadCorpus() {
+      const container = document.getElementById('corpusListContainer');
+      const countBadge = document.getElementById('corpusTotalCount');
+      if (container) {
+        container.innerHTML = `<div class="text-center py-6 text-slate-400 text-xs"><i data-lucide="loader-2" class="w-4 h-4 animate-spin inline-block mr-2"></i>Đang tải kho tài liệu...</div>`;
+        lucide.createIcons();
+      }
+
+      try {
+        const res = await fetch('/api/documents');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        cachedCorpusDocs = await res.json();
+        
+        if (countBadge) countBadge.innerText = cachedCorpusDocs.length;
+        renderCorpusList(cachedCorpusDocs);
+      } catch (err) {
+        console.error('Failed to load corpus:', err);
+        if (container) {
+          container.innerHTML = `<div class="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-600 dark:text-rose-400 text-xs">Lỗi khi tải kho tài liệu: ${err.message}. Vui lòng thử tải lại trang.</div>`;
+        }
+      }
+    }
+
+    function renderCorpusList(docs) {
+      const container = document.getElementById('corpusListContainer');
+      if (!container) return;
+
+      if (!docs || docs.length === 0) {
+        container.innerHTML = `<div class="text-center py-8 text-slate-400 text-xs">Kho tài liệu hiện đang trống. Hãy thêm tài liệu hoặc nạp file PDF ở tab bên cạnh.</div>`;
+        return;
+      }
+
+      container.innerHTML = docs.map(d => {
+        const safeTitle = escapeHtml(d.title);
+        const safeCat = escapeHtml(d.category || 'Tài liệu');
+        const safeSummary = escapeHtml(d.summary || (d.content ? d.content.substring(0, 110) + '...' : ''));
+        const levelBadge = d.level !== undefined ? `Layer ${d.level}` : 'Layer 0';
+
+        return `
+          <div class="py-3 px-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950/60 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs border border-transparent hover:border-slate-200 dark:hover:border-slate-800">
+            <div class="space-y-1 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-bold text-slate-900 dark:text-white text-sm hover:text-brand-600 dark:hover:text-brand-300 cursor-pointer transition" onclick="openDocModal(${d.id})">${safeTitle}</span>
+                <span class="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300 font-medium text-[10px] border border-brand-200 dark:border-brand-500/20">${safeCat}</span>
+                <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-[10px]">${levelBadge}</span>
+                <span class="text-slate-400 font-mono text-[10px]">ID: #${d.id}</span>
+              </div>
+              <p class="text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">${safeSummary}</p>
+            </div>
+            <div class="flex items-center space-x-2 shrink-0">
+              <button onclick="focusDocIn3D(${d.id})" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 rounded-lg transition shadow-sm flex items-center space-x-1" title="Xem vị trí trong không gian 3D">
+                <i data-lucide="box" class="w-3.5 h-3.5"></i>
+                <span>Xem 3D</span>
+              </button>
+              <button onclick="openDocModal(${d.id})" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-medium transition shadow-sm">
+                Chi tiết
+              </button>
+              <button onclick="deleteDoc(${d.id})" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 rounded-lg transition shadow-sm">
+                Xóa
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      lucide.createIcons();
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    async function handleAddDocument(e) {
+      e.preventDefault();
+      const title = document.getElementById('newDocTitle').value.trim();
+      const category = document.getElementById('newDocCategory').value.trim();
+      const content = document.getElementById('newDocContent').value.trim();
+      const btn = document.getElementById('addDocBtn');
+
+      if (!title || !content) {
+        alert('Vui lòng nhập đầy đủ tiêu đề và nội dung tài liệu.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang tạo Vector & Chèn vào HNSW...</span>`;
+      lucide.createIcons();
+
+      try {
+        const res = await fetch('/api/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, category, content })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        alert(`Đã thêm thành công tài liệu #${data.document.id}! Vector đã được chèn vào HNSW tại Layer ${data.document.level}.`);
+        document.getElementById('newDocTitle').value = '';
+        document.getElementById('newDocContent').value = '';
+        loadCorpus();
+        loadStats();
+        load3DGraphData(true);
+        if (data.trace) {
+          lastInsertionResults = data;
+        }
+      } catch (err) {
+        alert('Lỗi: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="upload-cloud" class="w-4 h-4"></i><span>Mã hóa Vector & Chèn vào HNSW</span>`;
+        lucide.createIcons();
+      }
+    }
+
+    async function handleAddDocumentAndVisualize() {
+      const title = document.getElementById('newDocTitle').value.trim();
+      const category = document.getElementById('newDocCategory').value.trim();
+      const content = document.getElementById('newDocContent').value.trim();
+
+      if (!title || !content) {
+        alert('Vui lòng nhập đầy đủ tiêu đề và nội dung tài liệu!');
+        return;
+      }
+
+      const btn = document.getElementById('addDocVisBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang xử lý & mở 3D...</span>`;
+      lucide.createIcons();
+
+      try {
+        const res = await fetch('/api/visualize-insertion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: title,
+            category: category,
+            content: content,
+            tags: ['Corpus Document'],
+            summary: content.slice(0, 160)
+          })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Lỗi thêm tài liệu');
+        }
+
+        lastInsertionResults = data;
+
+        // Reset form
+        document.getElementById('newDocTitle').value = '';
+        document.getElementById('newDocContent').value = '';
+        loadCorpus();
+        loadStats();
+
+        // Switch to 3D tab & insert mode
+        switchTab('3d');
+        switch3DMode('insert');
+        setup3DInsertionData(data);
+        graphDirty3D = true;
+      } catch (err) {
+        alert('Lỗi: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="play-circle" class="w-4 h-4"></i><span>Lưu & Xem Mô Phỏng Chèn 3D</span>`;
+        lucide.createIcons();
+      }
+    }
+
+    function focusDocIn3D(docId) {
+      switchTab('3d');
+      const targetMesh = nodeMeshes.find(m => m.userData.docId === docId);
+      if (targetMesh) {
+        if (controls3D) controls3D.target.set(targetMesh.position.x, targetMesh.position.y, targetMesh.position.z);
+        inspect3DNode(targetMesh.userData);
+        createPulseHalo(targetMesh.position, 0x10b981);
+      }
+    }
+
+    async function deleteDoc(id) {
+      if (!confirm(`Bạn có chắc muốn xóa tài liệu #${id} khỏi kho và tái cấu trúc đồ thị?`)) return;
+      try {
+        const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        loadCorpus();
+        loadStats();
+        load3DGraphData(true);
+      } catch (err) {
+        alert('Lỗi khi xóa: ' + err.message);
+      }
+    }
+
+    async function openDocModal(docId) {
+      try {
+        let doc = cachedCorpusDocs.find(d => d.id === docId);
+        if (!doc) {
+          const res = await fetch('/api/documents');
+          const docs = await res.json();
+          cachedCorpusDocs = docs;
+          doc = docs.find(d => d.id === docId);
+        }
+        if (!doc) return;
+
+        document.getElementById('modalTitle').innerText = doc.title;
+        document.getElementById('modalCategory').innerText = doc.category || 'Tài liệu';
+        document.getElementById('modalDocId').innerText = `ID: #${doc.id} (Tầng: Layer ${doc.level !== undefined ? doc.level : 0})`;
+        document.getElementById('modalSummary').innerText = doc.summary || 'Không có tóm tắt.';
+        document.getElementById('modalContent').innerText = doc.content || '';
+
+        document.getElementById('docModal').classList.remove('hidden');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function closeDocModal() {
+      const modal = document.getElementById('docModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    // Initial Startup
+    window.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      lucide.createIcons();
+      loadStats();
+      loadCorpus();
+      handleSearch();
+    });
+  </script>
+</body>
+</html>
